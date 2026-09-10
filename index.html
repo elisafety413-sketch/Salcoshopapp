@@ -1,0 +1,2715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Salco Shop — Pick Sheet</title>
+<style>
+  :root{
+    --red:#C00000;
+    --red-dark:#8f0000;
+    --red-light:#F2DCDB;
+    --blue-light:#DCE6F1;
+    --black:#141414;
+    --gray:#6b6b6b;
+    --gray-line:#e2e2e2;
+    --white:#ffffff;
+    --bg:#f6f5f4;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:Arial, Helvetica, sans-serif;
+    background:var(--bg);
+    color:var(--black);
+    -webkit-tap-highlight-color:transparent;
+  }
+  .app{ max-width:900px; margin:0 auto; min-height:100vh; background:var(--white); display:flex; flex-direction:column; }
+
+  header.topbar{
+    background:var(--red); color:var(--white);
+    padding:14px 16px 14px; position:sticky; top:0; z-index:25;
+  }
+  header.topbar .toprow{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  header.topbar .brand{ font-size:12px; letter-spacing:1.5px; font-weight:700; opacity:.9; text-transform:uppercase; }
+  header.topbar h1{ margin:2px 0 0; font-size:22px; font-weight:800; }
+
+  .direction-toggle{
+    display:flex; background:rgba(255,255,255,.18); border-radius:12px; padding:3px; flex-shrink:0;
+  }
+  .direction-toggle button{
+    border:none; background:none; color:#fff; font-weight:800; font-size:14px;
+    padding:9px 18px; border-radius:9px; cursor:pointer; letter-spacing:.5px;
+  }
+  .direction-toggle button.active{ background:#fff; color:var(--red); }
+
+  .settings-btn{
+    background:rgba(255,255,255,.18); border:none; border-radius:10px;
+    width:38px; height:38px; font-size:17px; cursor:pointer; flex-shrink:0; color:#fff;
+  }
+  .settings-help{ font-size:12.5px; color:var(--gray); line-height:1.5; margin:4px 0 14px; }
+  .settings-status{ font-size:12.5px; font-weight:700; min-height:18px; margin-bottom:6px; }
+  .settings-status.ok{ color:#15803d; }
+  .settings-status.err{ color:var(--red-dark); }
+  .settings-status.pending{ color:var(--gray); }
+
+  .search-bar{ padding:12px 16px; border-bottom:1px solid var(--gray-line); position:sticky; top:70px; background:#fff; z-index:20; }
+  .search-bar input{
+    width:100%; font-size:16px; padding:12px 14px; border:1.5px solid var(--gray-line);
+    border-radius:10px; font-family:inherit;
+  }
+  .search-bar input:focus{ outline:none; border-color:var(--red); }
+
+  .chip-row{ display:flex; gap:8px; overflow-x:auto; padding:10px 16px; border-bottom:1px solid var(--gray-line); }
+  .chip-row::-webkit-scrollbar{ display:none; }
+  .chip{
+    flex-shrink:0; border:1.5px solid var(--gray-line); background:#fff; color:var(--black);
+    border-radius:999px; padding:8px 14px; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;
+  }
+  .chip.active{ background:var(--red); border-color:var(--red); color:#fff; }
+
+  main{ padding:8px 16px 110px; flex:1; }
+
+  .cat-block{ margin-top:18px; }
+  .cat-title{
+    font-size:13px; text-transform:uppercase; letter-spacing:1px; font-weight:800; color:var(--red);
+    padding:6px 0; border-bottom:2px solid var(--red-light); margin-bottom:4px;
+  }
+  .item-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:11px 2px; border-bottom:1px solid var(--gray-line);
+  }
+  .item-row .iname{ font-size:15px; font-weight:600; }
+  .item-row .iunit{ color:var(--gray); font-size:12px; }
+  .add-item-btn{
+    flex-shrink:0; background:var(--red-light); color:var(--red); border:none; border-radius:9px;
+    width:42px; height:38px; font-size:20px; font-weight:800; cursor:pointer;
+  }
+  .add-item-btn:active{ background:var(--red); color:#fff; }
+  .no-results{ text-align:center; color:var(--gray); padding:40px 10px; }
+
+  .cart-fab{
+    position:fixed; right:max(16px, calc((100vw - 900px)/2 + 16px)); bottom:20px; z-index:30;
+    background:var(--black); color:#fff; border-radius:999px; padding:14px 22px;
+    display:flex; align-items:center; gap:10px; box-shadow:0 8px 24px rgba(0,0,0,.28);
+    font-weight:700; font-size:16px; border:none; cursor:pointer;
+  }
+  .cart-fab .count{
+    background:var(--red); color:#fff; border-radius:999px; min-width:24px; height:24px;
+    display:inline-flex; align-items:center; justify-content:center; font-size:13px; padding:0 6px;
+  }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(20,20,20,.5); display:none;
+    align-items:flex-end; justify-content:center; z-index:50;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal{
+    background:#fff; width:100%; max-width:900px; max-height:90vh; overflow-y:auto;
+    border-radius:18px 18px 0 0; padding:20px 20px 26px;
+  }
+  .modal-handle{ width:40px; height:5px; background:var(--gray-line); border-radius:99px; margin:0 auto 14px; }
+  .modal h2{ margin:0 0 14px; font-size:20px; }
+  .modal-section-title{ font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--gray); font-weight:800; margin:16px 0 8px; }
+
+  .cart-list{ list-style:none; margin:0; padding:0; }
+  .cart-row{ display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--gray-line); }
+  .cart-row .info{ flex:1; }
+  .cart-row .iname{ font-weight:700; font-size:15.5px; }
+  .cart-row .imeta{ color:var(--gray); font-size:12.5px; }
+  .stepper-sm{ display:flex; align-items:center; border:1px solid var(--gray-line); border-radius:8px; }
+  .stepper-sm button{ background:none; border:none; width:32px; height:32px; font-size:18px; color:var(--red); font-weight:800; cursor:pointer; }
+  .stepper-sm span{ min-width:26px; text-align:center; font-weight:700; font-size:14px; }
+  .remove-btn{ background:none; border:none; color:var(--gray); font-size:19px; cursor:pointer; padding:6px; }
+  .empty-cart{ color:var(--gray); text-align:center; padding:30px 10px; }
+
+  .row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .field{ flex:1; min-width:140px; display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+  .field label{ font-size:11.5px; color:var(--gray); font-weight:700; text-transform:uppercase; letter-spacing:.4px; }
+  input[type=text], input[type=number]{
+    font-family:inherit; font-size:16px; padding:11px 12px; border:1.5px solid var(--gray-line);
+    border-radius:10px; width:100%;
+  }
+  input:focus{ outline:none; border-color:var(--red); }
+  .btn-group{ display:flex; gap:8px; flex-wrap:wrap; }
+  .toggle-opt{
+    border:1.5px solid var(--gray-line); background:#fff; border-radius:9px; padding:9px 16px;
+    font-size:14px; font-weight:700; cursor:pointer; color:var(--black);
+  }
+  .toggle-opt.selected{ background:var(--red); color:#fff; border-color:var(--red); }
+
+  .modal-actions{ display:flex; gap:10px; margin-top:20px; }
+  .btn-secondary{
+    flex:1; background:#fff; border:1.5px solid var(--gray-line); color:var(--black);
+    padding:14px; border-radius:10px; font-weight:700; font-size:15px; cursor:pointer;
+  }
+  .btn-primary{
+    flex:1; background:var(--red); border:none; color:#fff;
+    padding:14px; border-radius:10px; font-weight:800; font-size:15px; cursor:pointer;
+  }
+
+  #reportView{ display:none; }
+  #reportView.open{ display:block; }
+  .report-sheet{ padding:22px; }
+  .report-header{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    border-bottom:4px solid var(--red); padding-bottom:12px; margin-bottom:16px;
+  }
+  .report-header .co{ font-weight:800; font-size:11px; letter-spacing:1px; color:var(--gray); text-transform:uppercase; }
+  .report-header h1{ margin:2px 0 0; font-size:21px; }
+  .direction-badge{ font-size:15px; font-weight:800; padding:8px 18px; border-radius:8px; color:#fff; }
+  .direction-badge.out{ background:var(--red); }
+  .direction-badge.in{ background:#2e7d32; }
+
+  .meta-fields{ display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; margin-bottom:16px; }
+  .meta-field label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--gray); font-weight:700; margin-bottom:3px; }
+  .meta-field .val{ font-size:14px; border-bottom:1px solid var(--gray-line); padding-bottom:5px; min-height:18px; }
+
+  table.report-table{ width:100%; border-collapse:collapse; margin-top:4px; }
+  table.report-table th{
+    background:var(--red); color:#fff; text-align:left; font-size:11.5px; text-transform:uppercase;
+    letter-spacing:.4px; padding:8px 9px;
+  }
+  table.report-table td{ padding:9px; border-bottom:1px solid var(--gray-line); font-size:13.5px; }
+  table.report-table td.blank{ color:var(--gray); }
+  table.report-table td.cat-td{ background:var(--blue-light); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.4px; }
+  .price-col, .total-col{ width:95px; }
+
+  .report-footer{ margin-top:24px; display:flex; justify-content:space-between; gap:30px; }
+  .sig-line{ flex:1; border-top:1px solid var(--black); padding-top:6px; font-size:12px; color:var(--gray); }
+  .report-actions{ display:flex; gap:10px; margin-top:24px; }
+  .report-note{ font-size:12px; color:var(--gray); margin-top:6px; font-style:italic; }
+
+  @media print{
+    body{ background:#fff; }
+    .topbar, .search-bar, .chip-row, .cart-fab, main > *:not(#reportView), .report-actions{ display:none !important; }
+    #reportView{ display:block !important; }
+    .app{ max-width:none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="toprow">
+      <div>
+        <div class="brand">Salco Group Construction Ltd.</div>
+        <h1>Shop Pick Sheet</h1>
+      </div>
+      <div class="direction-toggle">
+        <button type="button" id="dirOut" class="active">OUT</button>
+        <button type="button" id="dirIn">IN</button>
+      </div>
+      <button type="button" id="settingsBtn" class="settings-btn" title="Price sheet settings">⚙️</button>
+    </div>
+  </header>
+
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="Search items…">
+  </div>
+  <div class="chip-row" id="chipRow"></div>
+
+  <main>
+    <div id="mainView"></div>
+
+    <div id="reportView">
+      <div class="report-sheet" id="reportSheet"></div>
+      <div class="report-actions">
+        <button class="btn-secondary" id="backToCartBtn">← Back to Pick Sheet</button>
+        <button class="btn-primary" id="printBtn">Print Report</button>
+      </div>
+    </div>
+  </main>
+
+  <button class="cart-fab" id="cartFab">
+    🛒 Review & Generate <span class="count" id="fabCount">0</span>
+  </button>
+
+  <div class="modal-overlay" id="settingsOverlay">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <h2>Price Sheet Settings</h2>
+      <p class="settings-help">
+        Paste the "Publish to web → CSV" link from your Google Sheet below.
+        Once set, this device will pull live prices from that sheet every
+        time the app opens (and keeps the last successful copy for offline use).
+      </p>
+      <input type="text" id="sheetUrlInput" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv" style="width:100%;padding:10px;border:1px solid var(--gray-line);border-radius:8px;font-size:13px;margin-bottom:10px;">
+      <div id="settingsStatus" class="settings-status"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="settingsCancelBtn" type="button">Close</button>
+        <button class="btn-secondary" id="settingsRefreshBtn" type="button">Refresh Now</button>
+        <button class="btn-primary" id="settingsSaveBtn" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="checkoutOverlay">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <h2>Cart & Job Details</h2>
+
+      <div class="modal-section-title">Items (<span id="modalCartCount">0</span>)</div>
+      <ul class="cart-list" id="cartList"></ul>
+
+      <div class="modal-section-title">Job Info</div>
+      <div class="row">
+        <div class="field"><label>Job Name</label><input type="text" id="jobName" placeholder="e.g. Adams Residence"></div>
+        <div class="field"><label>Job #</label><input type="text" id="jobNumber" placeholder="e.g. SGD-26-298"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>PO #</label><input type="text" id="poNumber"></div>
+        <div class="field"><label>Date</label><input type="text" id="reportDate"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Person Taking/Returning Materials</label><input type="text" id="personName" placeholder="Name"></div>
+        <div class="field" style="max-width:140px;"><label>Crew Size</label><input type="text" id="crewSize"></div>
+      </div>
+
+      <div class="modal-section-title">Scope</div>
+      <div class="btn-group" id="scopeGroup">
+        <button type="button" class="toggle-opt" data-scope="General">General</button>
+        <button type="button" class="toggle-opt" data-scope="Asbestos">Asbestos</button>
+        <button type="button" class="toggle-opt" data-scope="Mold">Mold</button>
+      </div>
+
+      <div class="modal-section-title">Risk Level</div>
+      <div class="btn-group" id="riskGroup">
+        <button type="button" class="toggle-opt" data-risk="Low">Low</button>
+        <button type="button" class="toggle-opt" data-risk="Moderate">Moderate</button>
+        <button type="button" class="toggle-opt" data-risk="High">High</button>
+      </div>
+
+      <div class="modal-section-title">DOP</div>
+      <div class="btn-group" id="dopGroup">
+        <button type="button" class="toggle-opt" data-dop="Yes">Yes</button>
+        <button type="button" class="toggle-opt" data-dop="No">No</button>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="cancelCheckout">Cancel</button>
+        <button class="btn-primary" id="generateReportBtn">Generate Report</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const CATALOG = {
+  "Safety": [
+    {id:1, name:"Air Horn", unit:"EA"},
+    {id:2, name:"Eye Wash Mist Spray", unit:"EA"},
+    {id:3, name:"Fire Extinguisher", unit:"EA"},
+    {id:4, name:"First Aid Kit", unit:"EA"},
+  ],
+  "Personal Protective Equipment": [
+    {id:5, name:"Ear Plugs", unit:"PAIR"},
+    {id:6, name:"Ear Plugs", unit:"BOX"},
+    {id:7, name:"Filter - Half Mask P100 3M (Square)", unit:"EA"},
+    {id:8, name:"Filter - Half Mask P100 North (Round)", unit:"EA"},
+    {id:9, name:"Filter - PAPR SP3 Full Face", unit:"BOX"},
+    {id:10, name:"Salco Gloves", unit:"PAIR"},
+    {id:11, name:"Gloves Nitrile - Medium (25 pairs/box)", unit:"PAIR"},
+    {id:12, name:"Gloves Nitrile - Medium (25 pairs/box)", unit:"BOX"},
+    {id:13, name:"Gloves Nitrile - Large (25 pairs/box)", unit:"PAIR"},
+    {id:14, name:"Gloves Nitrile - Large (25 pairs/box)", unit:"BOX"},
+    {id:15, name:"Gloves Nitrile - XLarge", unit:"BOX"},
+    {id:16, name:"Gloves - Chemical Resistant", unit:"PAIR"},
+    {id:17, name:"Gloves - Winter", unit:"PAIR"},
+    {id:18, name:"Mask Wipes", unit:"BOX"},
+    {id:19, name:"Rubber Boots", unit:"PAIR"},
+    {id:20, name:"Safety Glasses", unit:"EA"},
+    {id:21, name:"Tyvek Suit w/ booties (per piece)", unit:"EA"},
+    {id:22, name:"Tyvek Suit w/ booties (25 pcs/box)", unit:"BOX"},
+    {id:23, name:"Tyvek Suit w/ Hood only (per piece)", unit:"EA"},
+    {id:24, name:"Tyvek Suit w/ Hood only (25 pcs/box)", unit:"BOX"},
+    {id:904, name:"Respirator - Half Mask (6000 Series)", unit:"EA"},
+    {id:905, name:"Respirator - Full Face", unit:"EA"},
+    {id:906, name:"Respirator Fit Test Kit", unit:"EA"},
+    {id:907, name:"Hard Hat - Type 1 Class E", unit:"EA"},
+    {id:908, name:"Hard Hat Liner - Winter", unit:"EA"},
+    {id:909, name:"Hi-Vis Safety Vest - Class 2", unit:"EA"},
+    {id:910, name:"Safety Boots - Steel Toe (CSA)", unit:"PAIR"},
+    {id:911, name:"Face Shield", unit:"EA"},
+    {id:912, name:"Ear Muffs", unit:"EA"},
+    {id:913, name:"Knee Pads", unit:"PAIR"},
+    {id:914, name:"Work Gloves - Leather / General", unit:"PAIR"},
+  ],
+  "Containment Set-Up": [
+    {id:25, name:"Poly - White", unit:"ROLL"},
+    {id:26, name:"Poly - Clear", unit:"ROLL"},
+    {id:27, name:"Hook Knife", unit:"EA"},
+    {id:28, name:"Extension Pole - Long", unit:"EA"},
+    {id:29, name:"Glove Bag - 8\"", unit:"EA"},
+    {id:30, name:"Glove Bag - 8\"", unit:"BOX"},
+    {id:31, name:"Hammer Tacker", unit:"EA"},
+    {id:32, name:"Poly Hangers (T-bar clips)", unit:"EA"},
+    {id:33, name:"Poly Knife", unit:"EA"},
+    {id:34, name:"Poly Knife Blades", unit:"PACK"},
+    {id:35, name:"Screws - Construction", unit:"BOX"},
+    {id:36, name:"Spray Glue", unit:"BOX"},
+    {id:37, name:"Staple Wires", unit:"PACK"},
+    {id:38, name:"Tape - Blue 3\"", unit:"ROLL"},
+    {id:39, name:"Tape - Duct Grey 2\"", unit:"EA"},
+    {id:40, name:"Tape - Duct White 2\"", unit:"ROLL"},
+    {id:41, name:"Tape - Tuck Red", unit:"ROLL"},
+    {id:42, name:"Tie Wire", unit:"PACK"},
+    {id:43, name:"Wood - 2\"x4\"x10'", unit:"EA"},
+    {id:44, name:"Wood - 2\"x4\"x12'", unit:"EA"},
+    {id:45, name:"Wood - 2\"x4\"x8'", unit:"EA"},
+    {id:46, name:"Wood - OSB Plywood Sheet", unit:"EA"},
+    {id:47, name:"Zip Ties", unit:"PACK"},
+    {id:48, name:"Zipper Door (Red)", unit:"EA"},
+  ],
+  "Power": [
+    {id:49, name:"Extension Cord", unit:"EA"},
+    {id:50, name:"GFCI - Plug In", unit:"EA"},
+    {id:51, name:"Generator", unit:"EA"},
+    {id:52, name:"Generator - Rent Per Day", unit:"DAY"},
+    {id:53, name:"Generator - Rent Per Week", unit:"WEEK"},
+    {id:54, name:"Generator - Rent Per Month", unit:"MONTH"},
+    {id:55, name:"Power Bar - Surge Protector", unit:"EA"},
+  ],
+  "Hand Tools": [
+    {id:56, name:"Chalk Line", unit:"EA"},
+    {id:57, name:"Chalk Line Refill", unit:"EA"},
+    {id:58, name:"Bolt Cutters", unit:"EA"},
+    {id:59, name:"Cutter - Glass", unit:"EA"},
+    {id:60, name:"Cutter - Wire", unit:"EA"},
+    {id:61, name:"Drywall Saw", unit:"EA"},
+    {id:62, name:"Flat Bar", unit:"EA"},
+    {id:63, name:"Flat Bar - Level Bar", unit:"EA"},
+    {id:64, name:"Hammer - Claw", unit:"EA"},
+    {id:65, name:"Hammer - Sledge 4lb", unit:"EA"},
+    {id:66, name:"Hammer - Sledge 10lb", unit:"EA"},
+    {id:67, name:"Measuring Tape", unit:"EA"},
+    {id:68, name:"Multi Bit Screwdriver", unit:"EA"},
+    {id:69, name:"Crow Bar - 36\"", unit:"EA"},
+    {id:70, name:"Pry Bar - Blue Bar", unit:"EA"},
+    {id:71, name:"Scraper - Bent 3\"", unit:"EA"},
+    {id:72, name:"Scraper - Floor", unit:"EA"},
+    {id:73, name:"Scraper - Floor Blade", unit:"EA"},
+    {id:74, name:"Scraper - Hand Razor 9\" w/ blades", unit:"EA"},
+    {id:75, name:"Scraper - Hand Razor 18\"", unit:"EA"},
+    {id:76, name:"Scraper - Ice", unit:"EA"},
+    {id:77, name:"Tin Snips", unit:"EA"},
+    {id:78, name:"Window Suction Cup", unit:"EA"},
+    {id:79, name:"Wire Brush - Small", unit:"EA"},
+    {id:80, name:"Wire Brush - Large", unit:"EA"},
+  ],
+  "HEPA Units": [
+    {id:81, name:"Neg Air Unit - 16x16", unit:"EA"},
+    {id:82, name:"Neg Air Unit - 16x16 - Rent Per Day", unit:"DAY"},
+    {id:83, name:"Neg Air Unit - 16x16 - Rent Per Week", unit:"WEEK"},
+    {id:84, name:"Neg Air Unit - 16x16 - Rent Per Month", unit:"MONTH"},
+    {id:85, name:"Pre Filter - 16x16x1", unit:"EA"},
+    {id:86, name:"Pleated Filter - 16x16x2", unit:"EA"},
+    {id:87, name:"Neg Air Unit - 18x24", unit:"EA"},
+    {id:88, name:"Neg Air Unit - 18x24 - Rent Per Day", unit:"DAY"},
+    {id:89, name:"Neg Air Unit - 18x24 - Rent Per Week", unit:"WEEK"},
+    {id:90, name:"Neg Air Unit - 18x24 - Rent Per Month", unit:"MONTH"},
+    {id:91, name:"Pre Filter - 18x24x1", unit:"EA"},
+    {id:92, name:"Pleated Filter - 18x24x2", unit:"EA"},
+    {id:93, name:"Flex Duct 12\"x25'", unit:"EA"},
+    {id:94, name:"Flex Duct 10\"x25'", unit:"EA"},
+    {id:95, name:"Vacuum HEPA GD930", unit:"SET"},
+    {id:96, name:"Vacuum HEPA GD930 - Rent Per Day", unit:"DAY"},
+    {id:97, name:"Vacuum HEPA GD930 - Rent Per Week", unit:"WEEK"},
+    {id:98, name:"Vacuum HEPA GD930 - Rent Per Month", unit:"MONTH"},
+    {id:99, name:"Vacuum Bags - HEPA GD930", unit:"EA"},
+  ],
+  "Chemicals": [
+    {id:100, name:"PM Glue - Fibreset (20/pail)", unit:"PAIL"},
+    {id:101, name:"Benefect 4L", unit:"PAIL"},
+    {id:102, name:"Caulking", unit:"EA"},
+    {id:103, name:"Caulking Gun", unit:"EA"},
+    {id:104, name:"Chil-Bridge Blue (20L/pail)", unit:"PAIL"},
+    {id:105, name:"Gas Container", unit:"EA"},
+    {id:106, name:"Kilz Paint Can 4L", unit:"GAL"},
+    {id:107, name:"Kilz Spray Can", unit:"EA"},
+    {id:108, name:"Piranha NextStrip Pro Maximun", unit:"PAIL"},
+    {id:109, name:"Peel Away - Heavy Duty Paint Remover", unit:"LITRE"},
+    {id:110, name:"Spray Foam Sealant (per can)", unit:"EA"},
+    {id:111, name:"Warrior (20L/pail)", unit:"LITRE"},
+    {id:792, name:"Fosters 40-50 Mold Resistant", unit:"EA"},
+    {id:793, name:"Fiberlock - Abs", unit:"EA"},
+    {id:889, name:"Pine-Sol Multi-Surface Cleaner - Original 4.25L", unit:"EA"},
+    {id:890, name:"Pine-Sol Multi-Surface Cleaner - Original 1.41L", unit:"EA"},
+  ],
+  "Miscellaneous Items": [
+    {id:112, name:"Heater", unit:"EA"},
+    {id:113, name:"Heater - Rent Per Day", unit:"DAY"},
+    {id:114, name:"Heater - Rent Per Week", unit:"WEEK"},
+    {id:115, name:"Heater - Rent Per Month", unit:"MONTH"},
+    {id:116, name:"Shop Vac (Non-Hilti Brand)", unit:"SET"},
+    {id:117, name:"Shop Vac (Non-Hilti Brand) - Rent Per Day", unit:"DAY"},
+    {id:118, name:"Shop Vac (Non-Hilti Brand) - Rent Per Week", unit:"WEEK"},
+    {id:119, name:"Shop Vac (Non-Hilti Brand) - Rent Per Month", unit:"MONTH"},
+    {id:120, name:"Waste Cart", unit:"EA"},
+    {id:121, name:"Waste Cart - Rent Per Day", unit:"DAY"},
+    {id:122, name:"Waste Cart - Rent Per Week", unit:"WEEK"},
+    {id:123, name:"Waste Cart - Rent Per Month", unit:"MONTH"},
+    {id:124, name:"Wheelbarrow", unit:"EA"},
+    {id:125, name:"Wheelbarrow - Rent Per Day", unit:"DAY"},
+    {id:126, name:"Wheelbarrow - Rent Per Week", unit:"WEEK"},
+    {id:127, name:"Wheelbarrow - Rent Per Month", unit:"MONTH"},
+    {id:128, name:"Walkie Talkie Radio", unit:"EA"},
+    {id:129, name:"Walkie Talkie Radio - Rent Per Day", unit:"DAY"},
+    {id:130, name:"Walkie Talkie Radio - Rent Per Week", unit:"WEEK"},
+    {id:131, name:"Walkie Talkie Radio - Rent Per Month", unit:"MONTH"},
+    {id:975, name:"Spill Kit", unit:"EA"},
+    {id:976, name:"Portable Toilet", unit:"EA"},
+  ],
+  "Clean-Up": [
+    {id:132, name:"Broom", unit:"EA"},
+    {id:133, name:"Broom - Push", unit:"EA"},
+    {id:134, name:"Broom - Whisk", unit:"EA"},
+    {id:135, name:"Dust Pan", unit:"EA"},
+    {id:136, name:"Floor Mop", unit:"EA"},
+    {id:137, name:"Pail - Empty", unit:"EA"},
+    {id:138, name:"Shovel - Flat", unit:"EA"},
+    {id:139, name:"Shovel - Scoop", unit:"EA"},
+    {id:140, name:"Rake", unit:"EA"},
+    {id:141, name:"Squeegee", unit:"EA"},
+    {id:142, name:"Wiping Rags - Half Box", unit:"HALF BOX"},
+    {id:143, name:"Wiping Rags - Full Box", unit:"FULL BOX"},
+    {id:969, name:"Wet / Dry Vacuum - 16 Gal", unit:"EA"},
+    {id:970, name:"Floor Buffer / Polisher", unit:"EA"},
+    {id:971, name:"Carpet Extractor", unit:"EA"},
+    {id:972, name:"Janitorial Cart", unit:"EA"},
+    {id:973, name:"Degreaser - Industrial 4L", unit:"EA"},
+    {id:974, name:"All-Purpose Cleaner Concentrate 4L", unit:"EA"},
+  ],
+  "Bags": [
+    {id:144, name:"Clear Bag", unit:"ROLL"},
+    {id:145, name:"Yellow Bag - Asbestos", unit:"ROLL"},
+    {id:146, name:"Garbage Bag (Black)", unit:"ROLL"},
+    {id:891, name:"Ziploc Big Bags XXL Double Zipper (2ft x 2.7ft)", unit:"PACK"},
+    {id:892, name:"Ziploc Big Bags XL (4 bags/pack)", unit:"PACK"},
+  ],
+  "Signage": [
+    {id:147, name:"Asbestos - Banner", unit:"ROLL"},
+    {id:148, name:"Asbestos - Sign", unit:"EA"},
+    {id:149, name:"Asbestos - Stickers", unit:"ROLL"},
+    {id:150, name:"Mold - Sign", unit:"EA"},
+    {id:151, name:"Red Danger - Banner", unit:"ROLL"},
+    {id:152, name:"Yellow Caution - Banner", unit:"ROLL"},
+  ],
+  "Access / Fall Protection": [
+    {id:153, name:"Step Ladder", unit:"EA"},
+    {id:154, name:"Step Ladder - Rent Per Day", unit:"DAY"},
+    {id:155, name:"Step Ladder - Rent Per Week", unit:"WEEK"},
+    {id:156, name:"Step Ladder - Rent Per Month", unit:"MONTH"},
+    {id:157, name:"Ladder - 6'", unit:"EA"},
+    {id:158, name:"Ladder - 6' - Rent Per Day", unit:"DAY"},
+    {id:159, name:"Ladder - 6' - Rent Per Week", unit:"WEEK"},
+    {id:160, name:"Ladder - 6' - Rent Per Month", unit:"MONTH"},
+    {id:161, name:"Ladder - 8'", unit:"EA"},
+    {id:162, name:"Ladder - 8' - Rent Per Day", unit:"DAY"},
+    {id:163, name:"Ladder - 8' - Rent Per Week", unit:"WEEK"},
+    {id:164, name:"Ladder - 8' - Rent Per Month", unit:"MONTH"},
+    {id:165, name:"Ladder - 10'", unit:"EA"},
+    {id:166, name:"Ladder - 10' - Rent Per Day", unit:"DAY"},
+    {id:167, name:"Ladder - 10' - Rent Per Week", unit:"WEEK"},
+    {id:168, name:"Ladder - 10' - Rent Per Month", unit:"MONTH"},
+    {id:169, name:"Ladder - 12'", unit:"EA"},
+    {id:170, name:"Ladder - 12' - Rent Per Day", unit:"DAY"},
+    {id:171, name:"Ladder - 12' - Rent Per Week", unit:"WEEK"},
+    {id:172, name:"Ladder - 12' - Rent Per Month", unit:"MONTH"},
+    {id:173, name:"Rolling Scaffold - Blue", unit:"SET"},
+    {id:174, name:"Rolling Scaffold - Blue - Rent Per Day", unit:"DAY"},
+    {id:175, name:"Rolling Scaffold - Blue - Rent Per Week", unit:"WEEK"},
+    {id:176, name:"Rolling Scaffold - Blue - Rent Per Month", unit:"MONTH"},
+    {id:177, name:"Rolling Scaffold - Yellow (Baker)", unit:"SET"},
+    {id:178, name:"Rolling Scaffold - Yellow (Baker) - Rent Per Day", unit:"DAY"},
+    {id:179, name:"Rolling Scaffold - Yellow (Baker) - Rent Per Week", unit:"WEEK"},
+    {id:180, name:"Rolling Scaffold - Yellow (Baker) - Rent Per Month", unit:"MONTH"},
+    {id:181, name:"Engineering Scaffold", unit:"SET"},
+    {id:182, name:"Engineering Scaffold - Rent Per Day", unit:"DAY"},
+    {id:183, name:"Engineering Scaffold - Rent Per Week", unit:"WEEK"},
+    {id:184, name:"Engineering Scaffold - Rent Per Month", unit:"MONTH"},
+    {id:185, name:"Harness + Lanyard", unit:"SET"},
+    {id:186, name:"Harness + Lanyard - Rent Per Day", unit:"DAY"},
+    {id:187, name:"Harness + Lanyard - Rent Per Week", unit:"WEEK"},
+    {id:188, name:"Harness + Lanyard - Rent Per Month", unit:"MONTH"},
+    {id:189, name:"Retractable Lanyard", unit:"EA"},
+    {id:190, name:"Retractable Lanyard - Rent Per Day", unit:"DAY"},
+    {id:191, name:"Retractable Lanyard - Rent Per Week", unit:"WEEK"},
+    {id:192, name:"Retractable Lanyard - Rent Per Month", unit:"MONTH"},
+  ],
+  "Decontamination Units & Supplies": [
+    {id:193, name:"Aluminum Shower", unit:"EA"},
+    {id:194, name:"Aluminum Shower - Rent Per Day", unit:"DAY"},
+    {id:195, name:"Aluminum Shower - Rent Per Week", unit:"WEEK"},
+    {id:196, name:"Aluminum Shower - Rent Per Month", unit:"MONTH"},
+    {id:197, name:"Body Towels - White", unit:"EA"},
+    {id:198, name:"Body Wash", unit:"EA"},
+    {id:199, name:"Decon Stage + 4 Poles", unit:"SET"},
+    {id:200, name:"Decon Stage + 4 Poles - Rent Per Day", unit:"DAY"},
+    {id:201, name:"Decon Stage + 4 Poles - Rent Per Week", unit:"WEEK"},
+    {id:202, name:"Decon Stage + 4 Poles - Rent Per Month", unit:"MONTH"},
+    {id:203, name:"Micron Filter - Assembly", unit:"EA"},
+    {id:204, name:"Micron Filter - Assembly - Rent Per Day", unit:"DAY"},
+    {id:205, name:"Micron Filter - Assembly - Rent Per Week", unit:"WEEK"},
+    {id:206, name:"Micron Filter - Assembly - Rent Per Month", unit:"MONTH"},
+    {id:207, name:"Micron Filter - Replacement", unit:"EA"},
+    {id:208, name:"Pump - Inline", unit:"EA"},
+    {id:209, name:"Pump - Inline - Rent Per Day", unit:"DAY"},
+    {id:210, name:"Pump - Inline - Rent Per Week", unit:"WEEK"},
+    {id:211, name:"Pump - Inline - Rent Per Month", unit:"MONTH"},
+    {id:212, name:"Pump - Submersible", unit:"EA"},
+    {id:213, name:"Pump - Submersible - Rent Per Day", unit:"DAY"},
+    {id:214, name:"Pump - Submersible - Rent Per Week", unit:"WEEK"},
+    {id:215, name:"Pump - Submersible - Rent Per Month", unit:"MONTH"},
+    {id:216, name:"Shower Drain Guard (Black)", unit:"EA"},
+    {id:217, name:"Shower Drain Guard (Black) - Rent Per Day", unit:"DAY"},
+    {id:218, name:"Shower Drain Guard (Black) - Rent Per Week", unit:"WEEK"},
+    {id:219, name:"Shower Drain Guard (Black) - Rent Per Month", unit:"MONTH"},
+    {id:220, name:"Teflon Tape", unit:"ROLL"},
+    {id:221, name:"Water Hose - Short", unit:"EA"},
+    {id:222, name:"Water Hose - Long", unit:"EA"},
+    {id:223, name:"Water Splitter", unit:"EA"},
+    {id:224, name:"Wrench - Adjustable", unit:"EA"},
+  ],
+  "Lighting": [
+    {id:225, name:"LED Head Lamp", unit:"EA"},
+    {id:226, name:"LED String Lights", unit:"EA"},
+    {id:227, name:"LED String Lights - Rent Per Day", unit:"DAY"},
+    {id:228, name:"LED String Lights - Rent Per Week", unit:"WEEK"},
+    {id:229, name:"LED String Lights - Rent Per Month", unit:"MONTH"},
+    {id:230, name:"LED Work Light", unit:"EA"},
+    {id:231, name:"LED Work Light - Rent Per Day", unit:"DAY"},
+    {id:232, name:"LED Work Light - Rent Per Week", unit:"WEEK"},
+    {id:233, name:"LED Work Light - Rent Per Month", unit:"MONTH"},
+    {id:234, name:"Wobble Light", unit:"EA"},
+    {id:235, name:"Wobble Light - Rent Per Day", unit:"DAY"},
+    {id:236, name:"Wobble Light - Rent Per Week", unit:"WEEK"},
+    {id:237, name:"Wobble Light - Rent Per Month", unit:"MONTH"},
+  ],
+  "Power Tools": [
+    {id:238, name:"Angle Grinder", unit:"EA"},
+    {id:239, name:"Angle Grinder - Rent Per Day", unit:"DAY"},
+    {id:240, name:"Angle Grinder - Rent Per Week", unit:"WEEK"},
+    {id:241, name:"Angle Grinder - Rent Per Month", unit:"MONTH"},
+    {id:242, name:"Angle Grinder - Concrete Cutting Disc", unit:"EA"},
+    {id:243, name:"Angle Grinder - Metal Cutting Disc", unit:"EA"},
+    {id:244, name:"Angle Grinder - Grinding Disc", unit:"EA"},
+    {id:245, name:"Angle Grinder - Diamond Wheel", unit:"EA"},
+    {id:246, name:"Angle Grinder - Wire Cup Brush/Wheel", unit:"EA"},
+    {id:247, name:"Drill - Corded", unit:"EA"},
+    {id:248, name:"Drill - Corded - Rent Per Day", unit:"DAY"},
+    {id:249, name:"Drill - Corded - Rent Per Week", unit:"WEEK"},
+    {id:250, name:"Drill - Corded - Rent Per Month", unit:"MONTH"},
+    {id:251, name:"Drill - Cordless (2 batteries + charger)", unit:"EA"},
+    {id:252, name:"Drill - Cordless (2 batteries + charger) - Rent Per Day", unit:"DAY"},
+    {id:253, name:"Drill - Cordless (2 batteries + charger) - Rent Per Week", unit:"WEEK"},
+    {id:254, name:"Drill - Cordless (2 batteries + charger) - Rent Per Month", unit:"MONTH"},
+    {id:255, name:"Electrical Tape", unit:"ROLL"},
+    {id:256, name:"Floor Scraper - Eddy", unit:"EA"},
+    {id:257, name:"Floor Scraper - Eddy - Rent Per Day", unit:"DAY"},
+    {id:258, name:"Floor Scraper - Eddy - Rent Per Week", unit:"WEEK"},
+    {id:259, name:"Floor Scraper - Eddy - Rent Per Month", unit:"MONTH"},
+    {id:260, name:"Floor Scraper - Eddy Blade", unit:"EA"},
+    {id:261, name:"Floor Scraper - Ride-on", unit:"EA"},
+    {id:262, name:"Floor Scraper - Ride-on - Rent Per Day", unit:"DAY"},
+    {id:263, name:"Floor Scraper - Ride-on - Rent Per Week", unit:"WEEK"},
+    {id:264, name:"Floor Scraper - Ride-on - Rent Per Month", unit:"MONTH"},
+    {id:265, name:"Floor Scraper - Ride-on Blade", unit:"EA"},
+    {id:266, name:"Hammer Drill", unit:"EA"},
+    {id:267, name:"Hammer Drill - Rent Per Day", unit:"DAY"},
+    {id:268, name:"Hammer Drill - Rent Per Week", unit:"WEEK"},
+    {id:269, name:"Hammer Drill - Rent Per Month", unit:"MONTH"},
+    {id:270, name:"Hammer Drill Bit", unit:"EA"},
+    {id:271, name:"Oscillating Tool", unit:"EA"},
+    {id:272, name:"Oscillating Tool - Rent Per Day", unit:"DAY"},
+    {id:273, name:"Oscillating Tool - Rent Per Week", unit:"WEEK"},
+    {id:274, name:"Oscillating Tool - Rent Per Month", unit:"MONTH"},
+    {id:275, name:"Leaf Blower", unit:"EA"},
+    {id:276, name:"Leaf Blower - Rent Per Day", unit:"DAY"},
+    {id:277, name:"Leaf Blower - Rent Per Week", unit:"WEEK"},
+    {id:278, name:"Leaf Blower - Rent Per Month", unit:"MONTH"},
+    {id:279, name:"Sawzall - Carbide Blade - 6\"", unit:"EA"},
+    {id:280, name:"Sawzall - Carbide Blade - 9\"", unit:"EA"},
+    {id:281, name:"Sawzall - Metal Blade - 6\"", unit:"EA"},
+    {id:282, name:"Sawzall - Metal Blade - 9\"", unit:"EA"},
+    {id:283, name:"Sawzall - Wood Blade - 6\"", unit:"EA"},
+    {id:284, name:"Sawzall - Wood Blade - 9\"", unit:"EA"},
+    {id:285, name:"Skill Saw/Circular Saw", unit:"EA"},
+    {id:286, name:"Skill Saw/Circular Saw - Rent Per Day", unit:"DAY"},
+    {id:287, name:"Skill Saw/Circular Saw - Rent Per Week", unit:"WEEK"},
+    {id:288, name:"Skill Saw/Circular Saw - Rent Per Month", unit:"MONTH"},
+    {id:289, name:"Skill Saw/Circular Saw - Blade", unit:"EA"},
+    {id:559, name:"Bosch Angle Grinder", unit:"EA"},
+    {id:560, name:"Bosch Angle Grinder - Rent Per Day", unit:"DAY"},
+    {id:561, name:"Bosch Angle Grinder - Rent Per Week", unit:"WEEK"},
+    {id:562, name:"Bosch Angle Grinder - Rent Per Month", unit:"MONTH"},
+    {id:563, name:"Laser Machine", unit:"EA"},
+    {id:564, name:"Laser Machine - Rent Per Day", unit:"DAY"},
+    {id:565, name:"Laser Machine - Rent Per Week", unit:"WEEK"},
+    {id:566, name:"Laser Machine - Rent Per Month", unit:"MONTH"},
+    {id:567, name:"Sawzall - Cord", unit:"EA"},
+    {id:568, name:"Sawzall - Cord - Rent Per Day", unit:"DAY"},
+    {id:569, name:"Sawzall - Cord - Rent Per Week", unit:"WEEK"},
+    {id:570, name:"Sawzall - Cord - Rent Per Month", unit:"MONTH"},
+    {id:571, name:"Black&Deck Drill", unit:"SET"},
+    {id:572, name:"Black&Deck Drill - Rent Per Day", unit:"DAY"},
+    {id:573, name:"Black&Deck Drill - Rent Per Week", unit:"WEEK"},
+    {id:574, name:"Black&Deck Drill - Rent Per Month", unit:"MONTH"},
+    {id:575, name:"STIHL Chainsaw", unit:"EA"},
+    {id:576, name:"STIHL Chainsaw - Rent Per Day", unit:"DAY"},
+    {id:577, name:"STIHL Chainsaw - Rent Per Week", unit:"WEEK"},
+    {id:578, name:"STIHL Chainsaw - Rent Per Month", unit:"MONTH"},
+    {id:579, name:"Bosch Rotating Hammer", unit:"EA"},
+    {id:580, name:"Bosch Rotating Hammer - Rent Per Day", unit:"DAY"},
+    {id:581, name:"Bosch Rotating Hammer - Rent Per Week", unit:"WEEK"},
+    {id:582, name:"Bosch Rotating Hammer - Rent Per Month", unit:"MONTH"},
+    {id:583, name:"Mixer Drill", unit:"SET"},
+    {id:584, name:"Mixer Drill - Rent Per Day", unit:"DAY"},
+    {id:585, name:"Mixer Drill - Rent Per Week", unit:"WEEK"},
+    {id:586, name:"Mixer Drill - Rent Per Month", unit:"MONTH"},
+    {id:587, name:"GMS Power Disteo", unit:"EA"},
+    {id:588, name:"GMS Power Disteo - Rent Per Day", unit:"DAY"},
+    {id:589, name:"GMS Power Disteo - Rent Per Week", unit:"WEEK"},
+    {id:590, name:"GMS Power Disteo - Rent Per Month", unit:"MONTH"},
+    {id:591, name:"GMS Power Disteo SET", unit:"SET"},
+    {id:592, name:"GMS Power Disteo SET - Rent Per Day", unit:"DAY"},
+    {id:593, name:"GMS Power Disteo SET - Rent Per Week", unit:"WEEK"},
+    {id:594, name:"GMS Power Disteo SET - Rent Per Month", unit:"MONTH"},
+    {id:595, name:"GMS Power Power", unit:"EA"},
+    {id:596, name:"GMS Power Power - Rent Per Day", unit:"DAY"},
+    {id:597, name:"GMS Power Power - Rent Per Week", unit:"WEEK"},
+    {id:598, name:"GMS Power Power - Rent Per Month", unit:"MONTH"},
+    {id:599, name:"Mastercraft Booster", unit:"EA"},
+    {id:600, name:"Mastercraft Booster - Rent Per Day", unit:"DAY"},
+    {id:601, name:"Mastercraft Booster - Rent Per Week", unit:"WEEK"},
+    {id:602, name:"Mastercraft Booster - Rent Per Month", unit:"MONTH"},
+    {id:603, name:"DeWalt Drill", unit:"SET"},
+    {id:604, name:"DeWalt Drill - Rent Per Day", unit:"DAY"},
+    {id:605, name:"DeWalt Drill - Rent Per Week", unit:"WEEK"},
+    {id:606, name:"DeWalt Drill - Rent Per Month", unit:"MONTH"},
+    {id:607, name:"RYOBI Staple Gun Cordless", unit:"EA"},
+    {id:608, name:"Makita SkillSaw", unit:"EA"},
+    {id:609, name:"Makita SkillSaw - Rent Per Day", unit:"DAY"},
+    {id:610, name:"Makita SkillSaw - Rent Per Week", unit:"WEEK"},
+    {id:611, name:"Makita SkillSaw - Rent Per Month", unit:"MONTH"},
+  ],
+  "Hilti Power Tools": [
+    {id:290, name:"Battery 22-85 Li-ion (1.7 lb)", unit:"EA"},
+    {id:291, name:"Battery 22-170 Li-ion (2.9 lbs)", unit:"EA"},
+    {id:292, name:"Battery 22-255 Li-ion (4 lbs)", unit:"EA"},
+    {id:293, name:"Battery Charger", unit:"EA"},
+    {id:294, name:"Combihammer TE 500-22 Cordless", unit:"EA"},
+    {id:295, name:"Combihammer TE 500-22 Cordless - Rent Per Day", unit:"DAY"},
+    {id:296, name:"Combihammer TE 500-22 Cordless - Rent Per Week", unit:"WEEK"},
+    {id:297, name:"Combihammer TE 500-22 Cordless - Rent Per Month", unit:"MONTH"},
+    {id:298, name:"Combihammer TE 50 w/ cord", unit:"SET"},
+    {id:299, name:"Combihammer TE 50 w/ cord - Rent Per Day", unit:"DAY"},
+    {id:300, name:"Combihammer TE 50 w/ cord - Rent Per Week", unit:"WEEK"},
+    {id:301, name:"Combihammer TE 50 w/ cord - Rent Per Month", unit:"MONTH"},
+    {id:302, name:"Combihammer TE 60 w/ cord", unit:"SET"},
+    {id:303, name:"Combihammer TE 60 w/ cord - Rent Per Day", unit:"DAY"},
+    {id:304, name:"Combihammer TE 60 w/ cord - Rent Per Week", unit:"WEEK"},
+    {id:305, name:"Combihammer TE 60 w/ cord - Rent Per Month", unit:"MONTH"},
+    {id:306, name:"Combihammer TE 70 w/ cord", unit:"SET"},
+    {id:307, name:"Combihammer TE 70 w/ cord - Rent Per Day", unit:"DAY"},
+    {id:308, name:"Combihammer TE 70 w/ cord - Rent Per Week", unit:"WEEK"},
+    {id:309, name:"Combihammer TE 70 w/ cord - Rent Per Month", unit:"MONTH"},
+    {id:310, name:"Cut-off Saw", unit:"EA"},
+    {id:311, name:"Cut-off Saw - Rent Per Day", unit:"DAY"},
+    {id:312, name:"Cut-off Saw - Rent Per Week", unit:"WEEK"},
+    {id:313, name:"Cut-off Saw - Rent Per Month", unit:"MONTH"},
+    {id:314, name:"Cordless Tower Light", unit:"EA"},
+    {id:315, name:"Cordless Tower Light - Rent Per Day", unit:"DAY"},
+    {id:316, name:"Cordless Tower Light - Rent Per Week", unit:"WEEK"},
+    {id:317, name:"Cordless Tower Light - Rent Per Month", unit:"MONTH"},
+    {id:318, name:"Drill", unit:"EA"},
+    {id:319, name:"Drill - Rent Per Day", unit:"DAY"},
+    {id:320, name:"Drill - Rent Per Week", unit:"WEEK"},
+    {id:321, name:"Drill - Rent Per Month", unit:"MONTH"},
+    {id:322, name:"Grinder DGH 130", unit:"EA"},
+    {id:323, name:"Grinder DGH 130 - Rent Per Day", unit:"DAY"},
+    {id:324, name:"Grinder DGH 130 - Rent Per Week", unit:"WEEK"},
+    {id:325, name:"Grinder DGH 130 - Rent Per Month", unit:"MONTH"},
+    {id:326, name:"Jack Hammer TE 2000 w/ cord", unit:"SET"},
+    {id:327, name:"Jack Hammer TE 2000 w/ cord - Rent Per Day", unit:"DAY"},
+    {id:328, name:"Jack Hammer TE 2000 w/ cord - Rent Per Week", unit:"WEEK"},
+    {id:329, name:"Jack Hammer TE 2000 w/ cord - Rent Per Month", unit:"MONTH"},
+    {id:330, name:"Jack Hammer TE 3000 w/ cord", unit:"SET"},
+    {id:331, name:"Jack Hammer TE 3000 w/ cord - Rent Per Day", unit:"DAY"},
+    {id:332, name:"Jack Hammer TE 3000 w/ cord - Rent Per Week", unit:"WEEK"},
+    {id:333, name:"Jack Hammer TE 3000 w/ cord - Rent Per Month", unit:"MONTH"},
+    {id:334, name:"Sawzall/Reciprocating Saw", unit:"EA"},
+    {id:335, name:"Sawzall/Reciprocating Saw - Rent Per Day", unit:"DAY"},
+    {id:336, name:"Sawzall/Reciprocating Saw - Rent Per Week", unit:"WEEK"},
+    {id:337, name:"Sawzall/Reciprocating Saw - Rent Per Month", unit:"MONTH"},
+    {id:338, name:"Skill Saw/Circular Saw", unit:"EA"},
+    {id:339, name:"Skill Saw/Circular Saw - Rent Per Day", unit:"DAY"},
+    {id:340, name:"Skill Saw/Circular Saw - Rent Per Week", unit:"WEEK"},
+    {id:341, name:"Skill Saw/Circular Saw - Rent Per Month", unit:"MONTH"},
+    {id:342, name:"Vacuum w/ attachments", unit:"SET"},
+    {id:343, name:"Vacuum w/ attachments - Rent Per Day", unit:"DAY"},
+    {id:344, name:"Vacuum w/ attachments - Rent Per Week", unit:"WEEK"},
+    {id:345, name:"Vacuum w/ attachments - Rent Per Month", unit:"MONTH"},
+    {id:346, name:"Tool Bag", unit:"EA"},
+    {id:347, name:"TE Detachable Power Cord", unit:"EA"},
+    {id:612, name:"HiltI Battery B22-85", unit:"EA"},
+    {id:613, name:"HiltI Battery B22-85 - Rent Per Day", unit:"DAY"},
+    {id:614, name:"HiltI Battery B22-85 - Rent Per Week", unit:"WEEK"},
+    {id:615, name:"HiltI Battery B22-85 - Rent Per Month", unit:"MONTH"},
+    {id:616, name:"HiltI Battery B22-170", unit:"EA"},
+    {id:617, name:"HiltI Battery B22-170 - Rent Per Day", unit:"DAY"},
+    {id:618, name:"HiltI Battery B22-170 - Rent Per Week", unit:"WEEK"},
+    {id:619, name:"HiltI Battery B22-170 - Rent Per Month", unit:"MONTH"},
+    {id:620, name:"HiltI Battery  B22-255", unit:"EA"},
+    {id:621, name:"HiltI Battery  B22-255 - Rent Per Day", unit:"DAY"},
+    {id:622, name:"HiltI Battery  B22-255 - Rent Per Week", unit:"WEEK"},
+    {id:623, name:"HiltI Battery  B22-255 - Rent Per Month", unit:"MONTH"},
+    {id:624, name:"HiltI Battery charger C-622", unit:"EA"},
+    {id:625, name:"HiltI Battery charger C-622 - Rent Per Day", unit:"DAY"},
+    {id:626, name:"HiltI Battery charger C-622 - Rent Per Week", unit:"WEEK"},
+    {id:627, name:"HiltI Battery charger C-622 - Rent Per Month", unit:"MONTH"},
+    {id:628, name:"HiltI Lights", unit:"EA"},
+    {id:629, name:"HiltI Lights - Rent Per Day", unit:"DAY"},
+    {id:630, name:"HiltI Lights - Rent Per Week", unit:"WEEK"},
+    {id:631, name:"HiltI Lights - Rent Per Month", unit:"MONTH"},
+    {id:632, name:"Hilti Sawzall Cordless SR 6-22", unit:"EA"},
+    {id:633, name:"Hilti Sawzall Cordless SR 6-22 - Rent Per Day", unit:"DAY"},
+    {id:634, name:"Hilti Sawzall Cordless SR 6-22 - Rent Per Week", unit:"WEEK"},
+    {id:635, name:"Hilti Sawzall Cordless SR 6-22 - Rent Per Month", unit:"MONTH"},
+    {id:636, name:"Hilti Grinder Cordless AG 5D-22", unit:"EA"},
+    {id:637, name:"Hilti Grinder Cordless AG 5D-22 - Rent Per Day", unit:"DAY"},
+    {id:638, name:"Hilti Grinder Cordless AG 5D-22 - Rent Per Week", unit:"WEEK"},
+    {id:639, name:"Hilti Grinder Cordless AG 5D-22 - Rent Per Month", unit:"MONTH"},
+    {id:640, name:"Hilti Grinnder Cord 700-14D", unit:"EA"},
+    {id:641, name:"Hilti Grinnder Cord 700-14D - Rent Per Day", unit:"DAY"},
+    {id:642, name:"Hilti Grinnder Cord 700-14D - Rent Per Week", unit:"WEEK"},
+    {id:643, name:"Hilti Grinnder Cord 700-14D - Rent Per Month", unit:"MONTH"},
+    {id:644, name:"Hilti DGH 130 Concrete Grinder", unit:"EA"},
+    {id:645, name:"Hilti DGH 130 Concrete Grinder - Rent Per Day", unit:"DAY"},
+    {id:646, name:"Hilti DGH 130 Concrete Grinder - Rent Per Week", unit:"WEEK"},
+    {id:647, name:"Hilti DGH 130 Concrete Grinder - Rent Per Month", unit:"MONTH"},
+    {id:648, name:"Hilti Impact Wrench Cordless", unit:"EA"},
+    {id:649, name:"Hilti Impact Wrench Cordless - Rent Per Day", unit:"DAY"},
+    {id:650, name:"Hilti Impact Wrench Cordless - Rent Per Week", unit:"WEEK"},
+    {id:651, name:"Hilti Impact Wrench Cordless - Rent Per Month", unit:"MONTH"},
+    {id:652, name:"Hilti Impact Driver Cordless SID 6-22", unit:"EA"},
+    {id:653, name:"Hilti Impact Driver Cordless SID 6-22 - Rent Per Day", unit:"DAY"},
+    {id:654, name:"Hilti Impact Driver Cordless SID 6-22 - Rent Per Week", unit:"WEEK"},
+    {id:655, name:"Hilti Impact Driver Cordless SID 6-22 - Rent Per Month", unit:"MONTH"},
+    {id:656, name:"Hilti Cordless Hammer Drill Driver SF 6H-22", unit:"EA"},
+    {id:657, name:"Hilti Cordless Hammer Drill Driver SF 6H-22 - Rent Per Day", unit:"DAY"},
+    {id:658, name:"Hilti Cordless Hammer Drill Driver SF 6H-22 - Rent Per Week", unit:"WEEK"},
+    {id:659, name:"Hilti Cordless Hammer Drill Driver SF 6H-22 - Rent Per Month", unit:"MONTH"},
+    {id:660, name:"Hilti SCO 6-22", unit:"EA"},
+    {id:661, name:"Hilti SCO 6-22 - Rent Per Day", unit:"DAY"},
+    {id:662, name:"Hilti SCO 6-22 - Rent Per Week", unit:"WEEK"},
+    {id:663, name:"Hilti SCO 6-22 - Rent Per Month", unit:"MONTH"},
+    {id:664, name:"Hilti Tool Balancer EXO T-22", unit:"EA"},
+    {id:665, name:"Hilti Tool Balancer EXO T-22 - Rent Per Day", unit:"DAY"},
+    {id:666, name:"Hilti Tool Balancer EXO T-22 - Rent Per Week", unit:"WEEK"},
+    {id:667, name:"Hilti Tool Balancer EXO T-22 - Rent Per Month", unit:"MONTH"},
+    {id:668, name:"Hilti Cordless Circular Saw SC 30WR-22", unit:"EA"},
+    {id:669, name:"Hilti Cordless Circular Saw SC 30WR-22 - Rent Per Day", unit:"DAY"},
+    {id:670, name:"Hilti Cordless Circular Saw SC 30WR-22 - Rent Per Week", unit:"WEEK"},
+    {id:671, name:"Hilti Cordless Circular Saw SC 30WR-22 - Rent Per Month", unit:"MONTH"},
+    {id:672, name:"Hilti Chipping Hammer TE 500", unit:"EA"},
+    {id:673, name:"Hilti Chipping Hammer TE 500 - Rent Per Day", unit:"DAY"},
+    {id:674, name:"Hilti Chipping Hammer TE 500 - Rent Per Week", unit:"WEEK"},
+    {id:675, name:"Hilti Chipping Hammer TE 500 - Rent Per Month", unit:"MONTH"},
+    {id:676, name:"Hilti Chipping Hammer TE 30", unit:"EA"},
+    {id:677, name:"Hilti Chipping Hammer TE 30 - Rent Per Day", unit:"DAY"},
+    {id:678, name:"Hilti Chipping Hammer TE 30 - Rent Per Week", unit:"WEEK"},
+    {id:679, name:"Hilti Chipping Hammer TE 30 - Rent Per Month", unit:"MONTH"},
+    {id:680, name:"Hilti Chipping Hammer TE 50", unit:"EA"},
+    {id:681, name:"Hilti Chipping Hammer TE 50 - Rent Per Day", unit:"DAY"},
+    {id:682, name:"Hilti Chipping Hammer TE 50 - Rent Per Week", unit:"WEEK"},
+    {id:683, name:"Hilti Chipping Hammer TE 50 - Rent Per Month", unit:"MONTH"},
+    {id:684, name:"Hilti Chipping Hammer TE 60", unit:"EA"},
+    {id:685, name:"Hilti Chipping Hammer TE 60 - Rent Per Day", unit:"DAY"},
+    {id:686, name:"Hilti Chipping Hammer TE 60 - Rent Per Week", unit:"WEEK"},
+    {id:687, name:"Hilti Chipping Hammer TE 60 - Rent Per Month", unit:"MONTH"},
+    {id:688, name:"Hilti Chipping Hammer TE 70", unit:"EA"},
+    {id:689, name:"Hilti Chipping Hammer TE 70 - Rent Per Day", unit:"DAY"},
+    {id:690, name:"Hilti Chipping Hammer TE 70 - Rent Per Week", unit:"WEEK"},
+    {id:691, name:"Hilti Chipping Hammer TE 70 - Rent Per Month", unit:"MONTH"},
+    {id:692, name:"Hilti Core Drill Stand", unit:"EA"},
+    {id:693, name:"Hilti Core Drill Stand - Rent Per Day", unit:"DAY"},
+    {id:694, name:"Hilti Core Drill Stand - Rent Per Week", unit:"WEEK"},
+    {id:695, name:"Hilti Core Drill Stand - Rent Per Month", unit:"MONTH"},
+    {id:696, name:"Hilti SB 6-22 Deep Cut Band Saw", unit:"EA"},
+    {id:697, name:"Hilti SB 6-22 Deep Cut Band Saw - Rent Per Day", unit:"DAY"},
+    {id:698, name:"Hilti SB 6-22 Deep Cut Band Saw - Rent Per Week", unit:"WEEK"},
+    {id:699, name:"Hilti SB 6-22 Deep Cut Band Saw - Rent Per Month", unit:"MONTH"},
+    {id:700, name:"Hilti Concrete Vibrator", unit:"EA"},
+    {id:701, name:"Hilti Concrete Vibrator - Rent Per Day", unit:"DAY"},
+    {id:702, name:"Hilti Concrete Vibrator - Rent Per Week", unit:"WEEK"},
+    {id:703, name:"Hilti Concrete Vibrator - Rent Per Month", unit:"MONTH"},
+    {id:704, name:"Hilti DSH 600-22 Battery Cut Off Saw", unit:"EA"},
+    {id:705, name:"Hilti DSH 600-22 Battery Cut Off Saw - Rent Per Day", unit:"DAY"},
+    {id:706, name:"Hilti DSH 600-22 Battery Cut Off Saw - Rent Per Week", unit:"WEEK"},
+    {id:707, name:"Hilti DSH 600-22 Battery Cut Off Saw - Rent Per Month", unit:"MONTH"},
+    {id:708, name:"Hilti HDE 500-22 Cordless Adhesive Dispenser", unit:"EA"},
+    {id:709, name:"Hilti HDE 500-22 Cordless Adhesive Dispenser - Rent Per Day", unit:"DAY"},
+    {id:710, name:"Hilti HDE 500-22 Cordless Adhesive Dispenser - Rent Per Week", unit:"WEEK"},
+    {id:711, name:"Hilti HDE 500-22 Cordless Adhesive Dispenser - Rent Per Month", unit:"MONTH"},
+    {id:712, name:"Hilti Vacuum Pump", unit:"EA"},
+    {id:713, name:"Hilti Vacuum Pump - Rent Per Day", unit:"DAY"},
+    {id:714, name:"Hilti Vacuum Pump - Rent Per Week", unit:"WEEK"},
+    {id:715, name:"Hilti Vacuum Pump - Rent Per Month", unit:"MONTH"},
+    {id:716, name:"Hilti Jack Hammer TE2000", unit:"EA"},
+    {id:717, name:"Hilti Jack Hammer TE2000 - Rent Per Day", unit:"DAY"},
+    {id:718, name:"Hilti Jack Hammer TE2000 - Rent Per Week", unit:"WEEK"},
+    {id:719, name:"Hilti Jack Hammer TE2000 - Rent Per Month", unit:"MONTH"},
+    {id:720, name:"Hilti Jack Hammer TE3000", unit:"EA"},
+    {id:721, name:"Hilti Jack Hammer TE3000 - Rent Per Day", unit:"DAY"},
+    {id:722, name:"Hilti Jack Hammer TE3000 - Rent Per Week", unit:"WEEK"},
+    {id:723, name:"Hilti Jack Hammer TE3000 - Rent Per Month", unit:"MONTH"},
+    {id:724, name:"Hilti SC 4WL-22 Cordless Circular Saw", unit:"EA"},
+    {id:725, name:"Hilti SC 4WL-22 Cordless Circular Saw - Rent Per Day", unit:"DAY"},
+    {id:726, name:"Hilti SC 4WL-22 Cordless Circular Saw - Rent Per Week", unit:"WEEK"},
+    {id:727, name:"Hilti SC 4WL-22 Cordless Circular Saw - Rent Per Month", unit:"MONTH"},
+    {id:728, name:"Hilti Tool Bag BIG", unit:"EA"},
+    {id:729, name:"Hilti Tool Bag BIG - Rent Per Day", unit:"DAY"},
+    {id:730, name:"Hilti Tool Bag BIG - Rent Per Week", unit:"WEEK"},
+    {id:731, name:"Hilti Tool Bag BIG - Rent Per Month", unit:"MONTH"},
+    {id:732, name:"Hilti Tool Bag Samll", unit:"EA"},
+    {id:733, name:"Hilti Tool Bag Samll - Rent Per Day", unit:"DAY"},
+    {id:734, name:"Hilti Tool Bag Samll - Rent Per Week", unit:"WEEK"},
+    {id:735, name:"Hilti Tool Bag Samll - Rent Per Month", unit:"MONTH"},
+    {id:736, name:"Hilti NHG 6-22 Heat Gun", unit:"EA"},
+    {id:737, name:"Hilti NHG 6-22 Heat Gun - Rent Per Day", unit:"DAY"},
+    {id:738, name:"Hilti NHG 6-22 Heat Gun - Rent Per Week", unit:"WEEK"},
+    {id:739, name:"Hilti NHG 6-22 Heat Gun - Rent Per Month", unit:"MONTH"},
+    {id:740, name:"Hilti SIW 10-22 Impact Wrench", unit:"EA"},
+    {id:741, name:"Hilti SIW 10-22 Impact Wrench - Rent Per Day", unit:"DAY"},
+    {id:742, name:"Hilti SIW 10-22 Impact Wrench - Rent Per Week", unit:"WEEK"},
+    {id:743, name:"Hilti SIW 10-22 Impact Wrench - Rent Per Month", unit:"MONTH"},
+    {id:744, name:"Hilti Battery Charger C4-12", unit:"EA"},
+    {id:745, name:"Hilti Battery Charger C4-12 - Rent Per Day", unit:"DAY"},
+    {id:746, name:"Hilti Battery Charger C4-12 - Rent Per Week", unit:"WEEK"},
+    {id:747, name:"Hilti Battery Charger C4-12 - Rent Per Month", unit:"MONTH"},
+    {id:748, name:"Hilti PR 300-HV2S Outdoor rotating laser level", unit:"EA"},
+    {id:749, name:"Hilti PR 300-HV2S Outdoor rotating laser level - Rent Per Day", unit:"DAY"},
+    {id:750, name:"Hilti PR 300-HV2S Outdoor rotating laser level - Rent Per Week", unit:"WEEK"},
+    {id:751, name:"Hilti PR 300-HV2S Outdoor rotating laser level - Rent Per Month", unit:"MONTH"},
+    {id:752, name:"Hilti NCV 10-22 Backpack concrete vibrator", unit:"EA"},
+    {id:753, name:"Hilti NCV 10-22 Backpack concrete vibrator - Rent Per Day", unit:"DAY"},
+    {id:754, name:"Hilti NCV 10-22 Backpack concrete vibrator - Rent Per Week", unit:"WEEK"},
+    {id:755, name:"Hilti NCV 10-22 Backpack concrete vibrator - Rent Per Month", unit:"MONTH"},
+    {id:756, name:"Hilti IDX-2 Actuated Tool (One Time Purchase)", unit:"EA"},
+    {id:757, name:"Hilti IDX-2 Actuated Tool (One Time Purchase) - Rent Per Day", unit:"DAY"},
+    {id:758, name:"Hilti IDX-2 Actuated Tool (One Time Purchase) - Rent Per Week", unit:"WEEK"},
+    {id:759, name:"Hilti IDX-2 Actuated Tool (One Time Purchase) - Rent Per Month", unit:"MONTH"},
+    {id:760, name:"Hilti C22-290", unit:"EA"},
+    {id:761, name:"Hilti C22-290 - Rent Per Day", unit:"DAY"},
+    {id:762, name:"Hilti C22-290 - Rent Per Week", unit:"WEEK"},
+    {id:763, name:"Hilti C22-290 - Rent Per Month", unit:"MONTH"},
+    {id:764, name:"Hilti C 8DC-22", unit:"EA"},
+    {id:765, name:"Hilti C 8DC-22 - Rent Per Day", unit:"DAY"},
+    {id:766, name:"Hilti C 8DC-22 - Rent Per Week", unit:"WEEK"},
+    {id:767, name:"Hilti C 8DC-22 - Rent Per Month", unit:"MONTH"},
+    {id:768, name:"Hilti TE 2000 CORDLESS", unit:"EA"},
+    {id:769, name:"Hilti TE 2000 CORDLESS - Rent Per Day", unit:"DAY"},
+    {id:770, name:"Hilti TE 2000 CORDLESS - Rent Per Week", unit:"WEEK"},
+    {id:771, name:"Hilti TE 2000 CORDLESS - Rent Per Month", unit:"MONTH"},
+    {id:772, name:"DSH-700-X 14", unit:"EA"},
+    {id:773, name:"DSH-700-X 14 - Rent Per Day", unit:"DAY"},
+    {id:774, name:"DSH-700-X 14 - Rent Per Week", unit:"WEEK"},
+    {id:775, name:"DSH-700-X 14 - Rent Per Month", unit:"MONTH"},
+    {id:776, name:"DSH FSC Floor Saw Cart", unit:"EA"},
+    {id:777, name:"DSH FSC Floor Saw Cart - Rent Per Day", unit:"DAY"},
+    {id:778, name:"DSH FSC Floor Saw Cart - Rent Per Week", unit:"WEEK"},
+    {id:779, name:"DSH FSC Floor Saw Cart - Rent Per Month", unit:"MONTH"},
+    {id:780, name:"Hilti TE 30-22 Coreless", unit:"EA"},
+    {id:781, name:"Hilti TE 30-22 Coreless - Rent Per Day", unit:"DAY"},
+    {id:782, name:"Hilti TE 30-22 Coreless - Rent Per Week", unit:"WEEK"},
+    {id:783, name:"Hilti TE 30-22 Coreless - Rent Per Month", unit:"MONTH"},
+    {id:784, name:"Hilti SF 6H-22 Coreless Hammer Drill Driver", unit:"EA"},
+    {id:785, name:"Hilti SF 6H-22 Coreless Hammer Drill Driver - Rent Per Day", unit:"DAY"},
+    {id:786, name:"Hilti SF 6H-22 Coreless Hammer Drill Driver - Rent Per Week", unit:"WEEK"},
+    {id:787, name:"Hilti SF 6H-22 Coreless Hammer Drill Driver - Rent Per Month", unit:"MONTH"},
+    {id:788, name:"Hilti PM 20-CG", unit:"EA"},
+    {id:789, name:"Hilti PM 20-CG - Rent Per Day", unit:"DAY"},
+    {id:790, name:"Hilti PM 20-CG - Rent Per Week", unit:"WEEK"},
+    {id:791, name:"Hilti PM 20-CG - Rent Per Month", unit:"MONTH"},
+  ],
+  "Sprayers": [
+    {id:348, name:"Airless Sprayer", unit:"EA"},
+    {id:349, name:"Airless Sprayer - Rent Per Day", unit:"DAY"},
+    {id:350, name:"Airless Sprayer - Rent Per Week", unit:"WEEK"},
+    {id:351, name:"Airless Sprayer - Rent Per Month", unit:"MONTH"},
+    {id:352, name:"Pressure Washer", unit:"EA"},
+    {id:353, name:"Pressure Washer - Rent Per Day", unit:"DAY"},
+    {id:354, name:"Pressure Washer - Rent Per Week", unit:"WEEK"},
+    {id:355, name:"Pressure Washer - Rent Per Month", unit:"MONTH"},
+    {id:356, name:"Pump Sprayer Piss Can - Red", unit:"EA"},
+    {id:357, name:"Pump Sprayer Piss Can - White", unit:"EA"},
+    {id:358, name:"Spray Mist Bottle", unit:"EA"},
+  ],
+  "Equipment": [
+    {id:359, name:"Backpack Blower", unit:"EA"},
+    {id:360, name:"Backpack Blower - Rent Per Day", unit:"DAY"},
+    {id:361, name:"Backpack Blower - Rent Per Week", unit:"WEEK"},
+    {id:362, name:"Backpack Blower - Rent Per Month", unit:"MONTH"},
+    {id:363, name:"Bartell Global B446 MEGA.T Walk Behind Trowel", unit:"EA"},
+    {id:364, name:"Bartell Global B446 MEGA.T Walk Behind Trowel - Rent Per Day", unit:"DAY"},
+    {id:365, name:"Bartell Global B446 MEGA.T Walk Behind Trowel - Rent Per Week", unit:"WEEK"},
+    {id:366, name:"Bartell Global B446 MEGA.T Walk Behind Trowel - Rent Per Month", unit:"MONTH"},
+    {id:367, name:"Bartell Global P650Y Planetary Grinder", unit:"EA"},
+    {id:368, name:"Bartell Global P650Y Planetary Grinder - Rent Per Day", unit:"DAY"},
+    {id:369, name:"Bartell Global P650Y Planetary Grinder - Rent Per Week", unit:"WEEK"},
+    {id:370, name:"Bartell Global P650Y Planetary Grinder - Rent Per Month", unit:"MONTH"},
+    {id:371, name:"Bartell Global Titan88 Ride On Trowels", unit:"EA"},
+    {id:372, name:"Bartell Global Titan88 Ride On Trowels - Rent Per Day", unit:"DAY"},
+    {id:373, name:"Bartell Global Titan88 Ride On Trowels - Rent Per Week", unit:"WEEK"},
+    {id:374, name:"Bartell Global Titan88 Ride On Trowels - Rent Per Month", unit:"MONTH"},
+    {id:375, name:"Blower", unit:"EA"},
+    {id:376, name:"Blower - Rent Per Day", unit:"DAY"},
+    {id:377, name:"Blower - Rent Per Week", unit:"WEEK"},
+    {id:378, name:"Blower - Rent Per Month", unit:"MONTH"},
+    {id:379, name:"Blue Air Scrubber", unit:"EA"},
+    {id:380, name:"Blue Air Scrubber - Rent Per Day", unit:"DAY"},
+    {id:381, name:"Blue Air Scrubber - Rent Per Week", unit:"WEEK"},
+    {id:382, name:"Blue Air Scrubber - Rent Per Month", unit:"MONTH"},
+    {id:383, name:"Booster Cable", unit:"EA"},
+    {id:384, name:"Bucket & mop", unit:"EA"},
+    {id:385, name:"Chiesel Set (AMAZON)", unit:"SET"},
+    {id:386, name:"Collapsible Decon Shower", unit:"EA"},
+    {id:387, name:"Collapsible Decon Shower - Rent Per Day", unit:"DAY"},
+    {id:388, name:"Collapsible Decon Shower - Rent Per Week", unit:"WEEK"},
+    {id:389, name:"Collapsible Decon Shower - Rent Per Month", unit:"MONTH"},
+    {id:390, name:"Compressor", unit:"EA"},
+    {id:391, name:"Compressor - Rent Per Day", unit:"DAY"},
+    {id:392, name:"Compressor - Rent Per Week", unit:"WEEK"},
+    {id:393, name:"Compressor - Rent Per Month", unit:"MONTH"},
+    {id:394, name:"Concrete Cutting Chainsaw", unit:"EA"},
+    {id:395, name:"Concrete Cutting Chainsaw - Rent Per Day", unit:"DAY"},
+    {id:396, name:"Concrete Cutting Chainsaw - Rent Per Week", unit:"WEEK"},
+    {id:397, name:"Concrete Cutting Chainsaw - Rent Per Month", unit:"MONTH"},
+    {id:398, name:"Concrete Floor Surface Grinder", unit:"EA"},
+    {id:399, name:"Concrete Floor Surface Grinder - Rent Per Day", unit:"DAY"},
+    {id:400, name:"Concrete Floor Surface Grinder - Rent Per Week", unit:"WEEK"},
+    {id:401, name:"Concrete Floor Surface Grinder - Rent Per Month", unit:"MONTH"},
+    {id:402, name:"Concrete Sprayer", unit:"EA"},
+    {id:403, name:"Concrete Sprayer - Rent Per Day", unit:"DAY"},
+    {id:404, name:"Concrete Sprayer - Rent Per Week", unit:"WEEK"},
+    {id:405, name:"Concrete Sprayer - Rent Per Month", unit:"MONTH"},
+    {id:406, name:"Concrete Water Sprayer (Long)", unit:"EA"},
+    {id:407, name:"Concrete Water Sprayer (Long) - Rent Per Day", unit:"DAY"},
+    {id:408, name:"Concrete Water Sprayer (Long) - Rent Per Week", unit:"WEEK"},
+    {id:409, name:"Concrete Water Sprayer (Long) - Rent Per Month", unit:"MONTH"},
+    {id:410, name:"CoreCut Walk Behind Concrete Saw", unit:"EA"},
+    {id:411, name:"CoreCut Walk Behind Concrete Saw - Rent Per Day", unit:"DAY"},
+    {id:412, name:"CoreCut Walk Behind Concrete Saw - Rent Per Week", unit:"WEEK"},
+    {id:413, name:"CoreCut Walk Behind Concrete Saw - Rent Per Month", unit:"MONTH"},
+    {id:414, name:"Cutter Bolt 24\"", unit:"EA"},
+    {id:415, name:"Dolley  (Home Depot)", unit:"EA"},
+    {id:416, name:"Drain Pump", unit:"EA"},
+    {id:417, name:"Drain Pump - Rent Per Day", unit:"DAY"},
+    {id:418, name:"Drain Pump - Rent Per Week", unit:"WEEK"},
+    {id:419, name:"Drain Pump - Rent Per Month", unit:"MONTH"},
+    {id:420, name:"Drill Bits", unit:"SET"},
+    {id:421, name:"Extension Ladders", unit:"EA"},
+    {id:422, name:"Extension Ladders - Rent Per Day", unit:"DAY"},
+    {id:423, name:"Extension Ladders - Rent Per Week", unit:"WEEK"},
+    {id:424, name:"Extension Ladders - Rent Per Month", unit:"MONTH"},
+    {id:425, name:"Floor Scrapers", unit:"EA"},
+    {id:426, name:"Folding Chairs", unit:"SET"},
+    {id:427, name:"Folding Table", unit:"EA"},
+    {id:428, name:"Grease Gun", unit:"EA"},
+    {id:429, name:"Hammer 16 oz", unit:"EA"},
+    {id:430, name:"Hammer 20 oz", unit:"EA"},
+    {id:431, name:"Harness Rope", unit:"EA"},
+    {id:432, name:"Harness Rope - Rent Per Day", unit:"DAY"},
+    {id:433, name:"Harness Rope - Rent Per Week", unit:"WEEK"},
+    {id:434, name:"Harness Rope - Rent Per Month", unit:"MONTH"},
+    {id:435, name:"Heavy Duty Anchor Shackle", unit:"EA"},
+    {id:436, name:"Hilti 3 Inch Bit", unit:"EA"},
+    {id:437, name:"Hilti 3 Inch Bit - Rent Per Day", unit:"DAY"},
+    {id:438, name:"Hilti 3 Inch Bit - Rent Per Week", unit:"WEEK"},
+    {id:439, name:"Hilti 3 Inch Bit - Rent Per Month", unit:"MONTH"},
+    {id:440, name:"Hilti Flooring Scrapers", unit:"EA"},
+    {id:441, name:"Hilti Flooring Scrapers - Rent Per Day", unit:"DAY"},
+    {id:442, name:"Hilti Flooring Scrapers - Rent Per Week", unit:"WEEK"},
+    {id:443, name:"Hilti Flooring Scrapers - Rent Per Month", unit:"MONTH"},
+    {id:444, name:"Hose", unit:"EA"},
+    {id:445, name:"Husky Light", unit:"EA"},
+    {id:446, name:"Jelly Can (Diesel)", unit:"EA"},
+    {id:447, name:"Jelly Can (GAS)", unit:"EA"},
+    {id:448, name:"Job Site Storage Tool Box", unit:"EA"},
+    {id:449, name:"Job Site Storage Tool Box - Rent Per Day", unit:"DAY"},
+    {id:450, name:"Job Site Storage Tool Box - Rent Per Week", unit:"WEEK"},
+    {id:451, name:"Job Site Storage Tool Box - Rent Per Month", unit:"MONTH"},
+    {id:452, name:"Level", unit:"EA"},
+    {id:453, name:"Microwave", unit:"EA"},
+    {id:454, name:"Monster Pry Bar", unit:"EA"},
+    {id:455, name:"Mud Pan", unit:"EA"},
+    {id:456, name:"Multicrafter", unit:"EA"},
+    {id:457, name:"Paint Brush", unit:"EA"},
+    {id:458, name:"Paint Roller", unit:"SET"},
+    {id:459, name:"Paint Scraper", unit:"EA"},
+    {id:460, name:"Paint Tray (Plastic)", unit:"EA"},
+    {id:461, name:"Pipe Wrench", unit:"EA"},
+    {id:462, name:"Plumber Kit", unit:"EA"},
+    {id:463, name:"Power Trowel", unit:"EA"},
+    {id:464, name:"Power Trowel - Rent Per Day", unit:"DAY"},
+    {id:465, name:"Power Trowel - Rent Per Week", unit:"WEEK"},
+    {id:466, name:"Power Trowel - Rent Per Month", unit:"MONTH"},
+    {id:467, name:"Pressure Washer 4000 PSI (Heavy Duty)", unit:"EA"},
+    {id:468, name:"Pressure Washer 4000 PSI (Heavy Duty) - Rent Per Day", unit:"DAY"},
+    {id:469, name:"Pressure Washer 4000 PSI (Heavy Duty) - Rent Per Week", unit:"WEEK"},
+    {id:470, name:"Pressure Washer 4000 PSI (Heavy Duty) - Rent Per Month", unit:"MONTH"},
+    {id:471, name:"Proloc Chain Hoist 2 Ton", unit:"EA"},
+    {id:472, name:"Proloc Chain Hoist 2 Ton - Rent Per Day", unit:"DAY"},
+    {id:473, name:"Proloc Chain Hoist 2 Ton - Rent Per Week", unit:"WEEK"},
+    {id:474, name:"Proloc Chain Hoist 2 Ton - Rent Per Month", unit:"MONTH"},
+    {id:475, name:"Propane Heater", unit:"EA"},
+    {id:476, name:"Propane Heater - Rent Per Day", unit:"DAY"},
+    {id:477, name:"Propane Heater - Rent Per Week", unit:"WEEK"},
+    {id:478, name:"Propane Heater - Rent Per Month", unit:"MONTH"},
+    {id:479, name:"Propane Tank", unit:"EA"},
+    {id:480, name:"Propane Torch", unit:"EA"},
+    {id:481, name:"RIDGID Sho Vac", unit:"EA"},
+    {id:482, name:"RIDGID Sho Vac - Rent Per Day", unit:"DAY"},
+    {id:483, name:"RIDGID Sho Vac - Rent Per Week", unit:"WEEK"},
+    {id:484, name:"RIDGID Sho Vac - Rent Per Month", unit:"MONTH"},
+    {id:485, name:"Rolling Magnetic", unit:"EA"},
+    {id:486, name:"Sanding Machine", unit:"EA"},
+    {id:487, name:"Sanding Machine - Rent Per Day", unit:"DAY"},
+    {id:488, name:"Sanding Machine - Rent Per Week", unit:"WEEK"},
+    {id:489, name:"Sanding Machine - Rent Per Month", unit:"MONTH"},
+    {id:490, name:"Scaffold Wheels (Outriggers)", unit:"SET"},
+    {id:491, name:"Scaffold Wheels (Outriggers) - Rent Per Day", unit:"DAY"},
+    {id:492, name:"Scaffold Wheels (Outriggers) - Rent Per Week", unit:"WEEK"},
+    {id:493, name:"Scaffold Wheels (Outriggers) - Rent Per Month", unit:"MONTH"},
+    {id:494, name:"Scraper (Yellow) (Big)", unit:"EA"},
+    {id:495, name:"Scraper (Yellow) (SMALL)", unit:"EA"},
+    {id:496, name:"Sho Vac", unit:"EA"},
+    {id:497, name:"Sho Vac - Rent Per Day", unit:"DAY"},
+    {id:498, name:"Sho Vac - Rent Per Week", unit:"WEEK"},
+    {id:499, name:"Sho Vac - Rent Per Month", unit:"MONTH"},
+    {id:500, name:"Shovel", unit:"EA"},
+    {id:501, name:"Shovels", unit:"EA"},
+    {id:502, name:"Sledge Hammer", unit:"EA"},
+    {id:503, name:"Snow Shovel", unit:"EA"},
+    {id:504, name:"Socket Set", unit:"SET"},
+    {id:505, name:"Spider Box", unit:"EA"},
+    {id:506, name:"Spider Box - Rent Per Day", unit:"DAY"},
+    {id:507, name:"Spider Box - Rent Per Week", unit:"WEEK"},
+    {id:508, name:"Spider Box - Rent Per Month", unit:"MONTH"},
+    {id:509, name:"Spider Box Cable", unit:"EA"},
+    {id:510, name:"Spider Box Cable - Rent Per Day", unit:"DAY"},
+    {id:511, name:"Spider Box Cable - Rent Per Week", unit:"WEEK"},
+    {id:512, name:"Spider Box Cable - Rent Per Month", unit:"MONTH"},
+    {id:513, name:"Staple Gun", unit:"EA"},
+    {id:514, name:"STIHL Bowler", unit:"EA"},
+    {id:515, name:"STIHL Bowler - Rent Per Day", unit:"DAY"},
+    {id:516, name:"STIHL Bowler - Rent Per Week", unit:"WEEK"},
+    {id:517, name:"STIHL Bowler - Rent Per Month", unit:"MONTH"},
+    {id:518, name:"Sump Pump", unit:"EA"},
+    {id:519, name:"Sump Pump - Rent Per Day", unit:"DAY"},
+    {id:520, name:"Sump Pump - Rent Per Week", unit:"WEEK"},
+    {id:521, name:"Sump Pump - Rent Per Month", unit:"MONTH"},
+    {id:522, name:"Torch Kit", unit:"EA"},
+    {id:523, name:"Traffic Cone", unit:"EA"},
+    {id:524, name:"ULINE utility Tilt Truck", unit:"EA"},
+    {id:525, name:"ULINE utility Tilt Truck - Rent Per Day", unit:"DAY"},
+    {id:526, name:"ULINE utility Tilt Truck - Rent Per Week", unit:"WEEK"},
+    {id:527, name:"ULINE utility Tilt Truck - Rent Per Month", unit:"MONTH"},
+    {id:528, name:"Water Bucket Heater", unit:"EA"},
+    {id:529, name:"Water Bucket Heater - Rent Per Day", unit:"DAY"},
+    {id:530, name:"Water Bucket Heater - Rent Per Week", unit:"WEEK"},
+    {id:531, name:"Water Bucket Heater - Rent Per Month", unit:"MONTH"},
+    {id:532, name:"Water Tote", unit:"EA"},
+    {id:533, name:"Water Tote - Rent Per Day", unit:"DAY"},
+    {id:534, name:"Water Tote - Rent Per Week", unit:"WEEK"},
+    {id:535, name:"Water Tote - Rent Per Month", unit:"MONTH"},
+    {id:536, name:"Wire Brush", unit:"EA"},
+    {id:537, name:"Woodcutting Chainsaw", unit:"EA"},
+    {id:538, name:"Woodcutting Chainsaw - Rent Per Day", unit:"DAY"},
+    {id:539, name:"Woodcutting Chainsaw - Rent Per Week", unit:"WEEK"},
+    {id:540, name:"Woodcutting Chainsaw - Rent Per Month", unit:"MONTH"},
+    {id:541, name:"Black Garage Bin", unit:"EA"},
+    {id:542, name:"Miller Plasma Cutter", unit:"EA"},
+    {id:543, name:"Miller Plasma Cutter - Rent Per Day", unit:"DAY"},
+    {id:544, name:"Miller Plasma Cutter - Rent Per Week", unit:"WEEK"},
+    {id:545, name:"Miller Plasma Cutter - Rent Per Month", unit:"MONTH"},
+    {id:546, name:"Mastercraft Multi-Crafter", unit:"EA"},
+    {id:547, name:"Mastercraft Multi-Crafter - Rent Per Day", unit:"DAY"},
+    {id:548, name:"Mastercraft Multi-Crafter - Rent Per Week", unit:"WEEK"},
+    {id:549, name:"Mastercraft Multi-Crafter - Rent Per Month", unit:"MONTH"},
+    {id:550, name:"Harness Rope", unit:"EA"},
+    {id:551, name:"Harness Rope - Rent Per Day", unit:"DAY"},
+    {id:552, name:"Harness Rope - Rent Per Week", unit:"WEEK"},
+    {id:553, name:"Harness Rope - Rent Per Month", unit:"MONTH"},
+    {id:554, name:"Ancor", unit:"EA"},
+    {id:555, name:"Stihl Backpack Blower", unit:"EA"},
+    {id:556, name:"Stihl Backpack Blower - Rent Per Day", unit:"DAY"},
+    {id:557, name:"Stihl Backpack Blower - Rent Per Week", unit:"WEEK"},
+    {id:558, name:"Stihl Backpack Blower - Rent Per Month", unit:"MONTH"},
+  ],
+  "Consumables": [
+    {id:794, name:"Filter - Half Mask P100 3M   Square", unit:"PACK"},
+    {id:795, name:"Filter - Half Mask P100 3M   Round", unit:"PACK"},
+    {id:796, name:"Gloves Hyflex - Medium", unit:"PAIR"},
+    {id:797, name:"Tyvek Suit w/ booties   25pcs/box XXXXL", unit:"BOX"},
+    {id:798, name:"Spray Glue", unit:"EA"},
+    {id:799, name:"Spray Glue", unit:"CASE"},
+    {id:800, name:"Tape - Blue 2\"", unit:"ROLL"},
+    {id:801, name:"Tape - Blue 2\"", unit:"CASE"},
+    {id:802, name:"Tape - Duct Grey 2\"", unit:"ROLL"},
+    {id:803, name:"Tape - Duct Grey 2\"", unit:"CASE"},
+    {id:804, name:"Tie Wire", unit:"EA"},
+    {id:805, name:"NEG AIR TUBING   500 ft./roll", unit:"ROLL"},
+    {id:806, name:"Vacuum Bags - HEPA GD930", unit:"PACK"},
+    {id:807, name:"Clear Bag", unit:"EA"},
+    {id:808, name:"Asbestos - Banner", unit:"EA"},
+    {id:809, name:"Sawzall - Metal Blade - 9\"", unit:"PACK"},
+    {id:810, name:"Sawzall - Wood Blade - 6\" / pk of 5", unit:"PACK"},
+    {id:811, name:"Rags", unit:"BOX"},
+    {id:812, name:"HEPA Vacuum", unit:"UNIT"},
+    {id:813, name:"Sawzall - Multi Material 9\"", unit:"EA"},
+    {id:814, name:"Sawzall - Multi Material 9\"", unit:"BUNDLE"},
+    {id:815, name:"Safety Glasses", unit:"PAIR"},
+    {id:816, name:"White Tape", unit:"ROLL"},
+    {id:817, name:"White Tape", unit:"BOX"},
+    {id:818, name:"Fiberlock", unit:"BUCKET"},
+    {id:819, name:"Clear Poly (Plastic) (Medium)", unit:"ROLL"},
+    {id:820, name:"Clear Poly Sheet 10x150", unit:"SHEET"},
+    {id:821, name:"Thin Cut Off Wheel", unit:"EA"},
+    {id:822, name:"Thin Cut Off Wheel", unit:"BUNDLE"},
+    {id:823, name:"Poly Knife Blades 25mm", unit:"PACK"},
+    {id:824, name:"Poly Knife Blades 18mm", unit:"PACK"},
+    {id:825, name:"Poly Knife Blades 18mm", unit:"EA"},
+    {id:826, name:"Tyvek XXL (Abatement Tech)", unit:"BOX"},
+    {id:827, name:"Tyvek XXL (Abatement Tech)", unit:"EA"},
+    {id:828, name:"Hilti Multipurpose Sawzall Blades 8\"", unit:"EA"},
+    {id:829, name:"Hilti Multipurpose Sawzall Blades 8\"", unit:"BUNDLE"},
+    {id:830, name:"Blue Tape", unit:"ROLL"},
+    {id:831, name:"Blue Tape", unit:"CASE"},
+    {id:832, name:"Hilti Metal Sawzall Blades 9\"", unit:"PIECE"},
+    {id:833, name:"Hilti Metal Sawzall Blades 9\"", unit:"BOX"},
+    {id:834, name:"Eco Pure Water Filter", unit:"PACK"},
+    {id:835, name:"Hilti Metal Sawzall Blades 12\"", unit:"BOX"},
+    {id:836, name:"Hilti Metal Sawzall Blades 12\"", unit:"PIECE"},
+    {id:837, name:"3M Organic Filter", unit:"BOX"},
+    {id:838, name:"3M Organic Filter", unit:"PAIR"},
+    {id:839, name:"Rags - White", unit:"EA"},
+    {id:840, name:"Mask Wipes", unit:"EA"},
+    {id:841, name:"Cleaning Sponge (Brown)", unit:"BOX"},
+    {id:842, name:"Cleaning Sponge (Brown)", unit:"EA"},
+    {id:843, name:"Gloves in Bucket", unit:"BUCKET"},
+    {id:844, name:"Surgical Mask", unit:"BOX"},
+    {id:845, name:"Windex 19 L", unit:"EA"},
+    {id:846, name:"Uline Surgical Mask", unit:"BOX"},
+    {id:847, name:"Dawn 1.12L", unit:"EA"},
+    {id:848, name:"ULINE Foam Eraser", unit:"BOX"},
+    {id:849, name:"ULINE Foam Eraser", unit:"CASE"},
+    {id:850, name:"Booties", unit:"CASE"},
+    {id:851, name:"Booties", unit:"EA"},
+    {id:852, name:"Mop Head 24oz Narrow Band", unit:"EA"},
+    {id:853, name:"Regular Mop Head", unit:"EA"},
+    {id:854, name:"Steel Wool", unit:"EA"},
+    {id:855, name:"Benefect 4L", unit:"EA"},
+    {id:856, name:"Red Danger Tape", unit:"EA"},
+    {id:857, name:"Yellow Caution Tape", unit:"EA"},
+    {id:858, name:"Chemical Resistant Gloves", unit:"EA"},
+    {id:859, name:"Poly - Orange", unit:"EA"},
+    {id:860, name:"Glove Bag", unit:"ROLL"},
+    {id:861, name:"Teflon Tape", unit:"EA"},
+    {id:862, name:"Diamond Cup Wheel (Concerte)", unit:"EA"},
+    {id:863, name:"Diamond Cup Wheel (Metal)", unit:"EA"},
+    {id:864, name:"PAPR", unit:"CASE"},
+    {id:865, name:"PAPR", unit:"EA"},
+    {id:866, name:"Windex 765 ml", unit:"EA"},
+    {id:867, name:"Lysol Toilet Bowl Cleaner", unit:"EA"},
+    {id:868, name:"P100 Half Mask Filter", unit:"PACK"},
+    {id:869, name:"Hilti Universal Blades 9\"", unit:"PACK"},
+    {id:870, name:"Hilti Universal Blades 9\"", unit:"EA"},
+    {id:871, name:"Clear Poly (Long)", unit:"ROLL"},
+    {id:872, name:"RIDGID SHO VAC VACUUM BAG", unit:"PA"},
+    {id:873, name:"Hilti Multipurpose Blades 9\"", unit:"BOX"},
+    {id:874, name:"Hilti Multipurpose Blades 9\"", unit:"EACH"},
+    {id:875, name:"Zip Wall", unit:"BOX"},
+    {id:876, name:"Zip Wall", unit:"EA"},
+    {id:877, name:"Glove Bag", unit:"ROLL"},
+  ],
+  "Special Materials": [
+    {id:878, name:"Benefact Degreaser (  1 gallon) (2025-06-15)", unit:"EA"},
+    {id:879, name:"DRS Odor Control ( 3.8 L) (2025-06-15)", unit:"EA"},
+    {id:880, name:"Benefact Degreaser ( 4 L) (2025-06-15)", unit:"EA"},
+    {id:881, name:"Diesel (2025-06-15)", unit:"L"},
+    {id:882, name:"Diesel (2025-06-16)", unit:"L"},
+    {id:883, name:"Reg Gas (2025-06-16)", unit:"L"},
+    {id:884, name:"Diesel (2025-06-17)", unit:"L"},
+    {id:885, name:"Reg Gas (2025-06-17)", unit:"L"},
+    {id:886, name:"Diesel (2025-06-17)", unit:"L"},
+    {id:887, name:"Diesel (2025-06-18)", unit:"L"},
+    {id:888, name:"Benefact Degreaser (  1 gallon) (2025-06-18)", unit:"EA"},
+  ],
+  "Mold Remediation": [
+    {id:893, name:"Dehumidifier - LGR Commercial (110-130 pint)", unit:"EA"},
+    {id:894, name:"Dehumidifier - Desiccant", unit:"EA"},
+    {id:895, name:"Air Mover - Axial Fan", unit:"EA"},
+    {id:896, name:"Air Mover - Centrifugal / Carpet Dryer", unit:"EA"},
+    {id:897, name:"Moisture Meter - Pin / Pinless", unit:"EA"},
+    {id:898, name:"Thermo-Hygrometer", unit:"EA"},
+    {id:899, name:"Manometer - Negative Pressure Monitor", unit:"EA"},
+    {id:900, name:"Borescope / Inspection Camera", unit:"EA"},
+    {id:901, name:"Concrobium Mold Control 4L", unit:"PAIL"},
+    {id:902, name:"Foster 40-80 Antimicrobial Coating 4L", unit:"PAIL"},
+    {id:903, name:"Foster 40-20 Mold Encapsulant 4L", unit:"PAIL"},
+  ],
+  "Carpentry": [
+    {id:915, name:"Miter Saw - 12\" Sliding Compound", unit:"EA"},
+    {id:916, name:"Miter Saw Stand", unit:"EA"},
+    {id:917, name:"Table Saw - Jobsite", unit:"EA"},
+    {id:918, name:"Jig Saw", unit:"EA"},
+    {id:919, name:"Router - Plunge", unit:"EA"},
+    {id:920, name:"Electric Planer", unit:"EA"},
+    {id:921, name:"Framing Nailer - Pneumatic", unit:"EA"},
+    {id:922, name:"Finish / Brad Nailer - Pneumatic", unit:"EA"},
+    {id:923, name:"Air Hose - 50 ft", unit:"EA"},
+    {id:924, name:"Nails - Framing Strip (nailer)", unit:"BOX"},
+    {id:925, name:"Nails - Brad 18ga (nailer)", unit:"BOX"},
+    {id:926, name:"Bar Clamp - 24\"", unit:"EA"},
+    {id:927, name:"Quick Grip Clamp", unit:"EA"},
+    {id:928, name:"Sawhorse", unit:"PAIR"},
+    {id:929, name:"Speed Square", unit:"EA"},
+    {id:930, name:"Framing Square", unit:"EA"},
+    {id:931, name:"Combination Square", unit:"EA"},
+    {id:932, name:"Wood Chisel Set", unit:"SET"},
+    {id:933, name:"Wood Screws - Assorted", unit:"BOX"},
+    {id:934, name:"Wood Glue", unit:"EA"},
+    {id:935, name:"Utility Knife", unit:"EA"},
+    {id:936, name:"Stud Finder", unit:"EA"},
+    {id:937, name:"Circular Saw Blade - Framing 7-1/4\"", unit:"EA"},
+  ],
+  "Concrete": [
+    {id:938, name:"Concrete Mixer - Portable", unit:"EA"},
+    {id:939, name:"Vibrating Screed", unit:"EA"},
+    {id:940, name:"Bull Float + Handle", unit:"EA"},
+    {id:941, name:"Magnesium Hand Float", unit:"EA"},
+    {id:942, name:"Steel Finishing Trowel", unit:"EA"},
+    {id:943, name:"Concrete Edger", unit:"EA"},
+    {id:944, name:"Concrete Groover", unit:"EA"},
+    {id:945, name:"Kneeling Board", unit:"EA"},
+    {id:946, name:"Core Drill - Handheld Diamond", unit:"EA"},
+    {id:947, name:"Core Bit - Diamond 4\"", unit:"EA"},
+    {id:948, name:"Form Ply / Formwork Panel", unit:"EA"},
+    {id:949, name:"Form Stakes", unit:"EA"},
+    {id:950, name:"Rebar - 10M x 20'", unit:"EA"},
+    {id:951, name:"Wire Mesh - 6x6 Sheet", unit:"EA"},
+    {id:952, name:"Concrete Mix - 30kg Bag", unit:"BAG"},
+    {id:953, name:"Curing Compound", unit:"PAIL"},
+    {id:954, name:"Concrete Bonding Agent", unit:"PAIL"},
+    {id:955, name:"Mortar / Grout Mix", unit:"BAG"},
+  ],
+  "Site Protection": [
+    {id:956, name:"Ram Board Floor Protection - Roll", unit:"ROLL"},
+    {id:957, name:"Masonite / Hardboard Sheet", unit:"EA"},
+    {id:958, name:"Corner Guard Protection", unit:"EA"},
+    {id:959, name:"Door Jamb Protector", unit:"EA"},
+    {id:960, name:"Moving Blanket", unit:"EA"},
+    {id:961, name:"Ratchet Strap", unit:"EA"},
+  ],
+  "Interior Demolition": [
+    {id:962, name:"Debris Chute - Section", unit:"EA"},
+    {id:963, name:"Nail Puller / Cat's Paw", unit:"EA"},
+    {id:964, name:"Drywall Axe / Demo Hatchet", unit:"EA"},
+    {id:965, name:"Toe-Kick Saw", unit:"EA"},
+    {id:966, name:"Carpet Knee Kicker", unit:"EA"},
+    {id:967, name:"Carpet Puller", unit:"EA"},
+    {id:968, name:"Dust Suppression Fogger", unit:"EA"},
+  ],
+};
+
+// Pricing pulled from the Salco Master Price List (Master_Prices_-List.xlsx),
+// keyed by the item's unique ID (matches CATALOG entry ids and the published
+// Google Sheet's ID column). All 976 items are priced as of this export.
+const PRICES = {
+  1: 28.9,
+  2: 17.95,
+  3: 74.65,
+  4: 43.75,
+  5: 0.65,
+  6: 130.0,
+  7: 14.69,
+  8: 14.69,
+  9: 322.5,
+  10: 5.0,
+  11: 0.65,
+  12: 16.25,
+  13: 0.85,
+  14: 21.19,
+  15: 16.25,
+  16: 12.98,
+  17: 33.35,
+  18: 20.0,
+  19: 39.98,
+  20: 3.25,
+  21: 7.2,
+  22: 180.0,
+  23: 4.9,
+  24: 122.5,
+  25: 50.0,
+  26: 54.98,
+  27: 11.6,
+  28: 98.0,
+  29: 15.0,
+  30: 375.0,
+  31: 81.25,
+  32: 8.75,
+  33: 1.81,
+  34: 12.44,
+  35: 49.98,
+  36: 107.5,
+  37: 10.61,
+  38: 15.7,
+  39: 12.98,
+  40: 7.64,
+  41: 11.49,
+  42: 14.98,
+  43: 10.27,
+  44: 12.87,
+  45: 6.58,
+  46: 24.98,
+  47: 14.99,
+  48: 19.32,
+  49: 30.0,
+  50: 52.0,
+  51: 799.0,
+  52: 37.5,
+  53: 131.25,
+  54: 375.0,
+  55: 29.98,
+  56: 21.19,
+  57: 16.23,
+  58: 37.5,
+  59: 23.75,
+  60: 28.75,
+  61: 9.99,
+  62: 12.5,
+  63: 37.5,
+  64: 16.06,
+  65: 44.98,
+  66: 66.95,
+  67: 10.0,
+  68: 14.98,
+  69: 9.98,
+  70: 29.98,
+  71: 12.5,
+  72: 34.02,
+  73: 0.55,
+  74: 17.5,
+  75: 22.5,
+  76: 19.98,
+  77: 24.98,
+  78: 137.5,
+  79: 4.44,
+  80: 3.75,
+  81: 1794.0,
+  82: 60.0,
+  83: 210.0,
+  84: 600.0,
+  85: 1.88,
+  86: 8.9,
+  87: 2000.0,
+  88: 75.0,
+  89: 262.5,
+  90: 750.0,
+  91: 1.88,
+  92: 8.69,
+  93: 61.25,
+  94: 56.25,
+  95: 664.95,
+  96: 34.38,
+  97: 120.33,
+  98: 343.8,
+  99: 28.75,
+  100: 112.5,
+  101: 57.38,
+  102: 8.98,
+  103: 19.98,
+  104: 687.5,
+  105: 25.99,
+  106: 37.5,
+  107: 16.25,
+  108: 595.0,
+  109: 35.0,
+  110: 27.5,
+  111: 25.96,
+  112: 129.0,
+  113: 2.81,
+  114: 9.84,
+  115: 28.1,
+  116: 250.0,
+  117: 6.25,
+  118: 21.88,
+  119: 62.5,
+  120: 1100.0,
+  121: 52.8,
+  122: 184.8,
+  123: 528.0,
+  124: 149.0,
+  125: 10.88,
+  126: 38.08,
+  127: 108.8,
+  128: 89.98,
+  129: 6.19,
+  130: 21.67,
+  131: 61.9,
+  132: 9.94,
+  133: 34.98,
+  134: 5.95,
+  135: 6.0,
+  136: 29.98,
+  137: 4.77,
+  138: 39.98,
+  139: 62.5,
+  140: 29.98,
+  141: 34.98,
+  142: 14.97,
+  143: 29.94,
+  144: 83.75,
+  145: 87.5,
+  146: 39.98,
+  147: 20.94,
+  148: 50.0,
+  149: 59.0,
+  150: 24.98,
+  151: 32.5,
+  152: 43.75,
+  153: 79.98,
+  154: 6.0,
+  155: 20.99,
+  156: 59.98,
+  157: 149.0,
+  158: 9.5,
+  159: 33.25,
+  160: 95.0,
+  161: 229.0,
+  162: 12.13,
+  163: 42.46,
+  164: 121.3,
+  165: 329.0,
+  166: 14.69,
+  167: 51.42,
+  168: 146.9,
+  169: 449.0,
+  170: 36.5,
+  171: 127.75,
+  172: 365.0,
+  173: 999.0,
+  174: 47.95,
+  175: 167.83,
+  176: 479.52,
+  177: 449.0,
+  178: 18.75,
+  179: 65.63,
+  180: 187.5,
+  181: 3500.0,
+  182: 105.0,
+  183: 367.5,
+  184: 1050.0,
+  185: 202.9,
+  186: 12.68,
+  187: 44.38,
+  188: 126.8,
+  189: 229.0,
+  190: 17.18,
+  191: 60.11,
+  192: 171.75,
+  193: 699.0,
+  194: 62.19,
+  195: 217.67,
+  196: 621.9,
+  197: 2.5,
+  198: 9.98,
+  199: 409.05,
+  200: 30.68,
+  201: 107.38,
+  202: 306.79,
+  203: 149.0,
+  204: 11.18,
+  205: 39.11,
+  206: 111.75,
+  207: 18.5,
+  208: 50.0,
+  209: 3.75,
+  210: 13.12,
+  211: 37.5,
+  212: 225.0,
+  213: 16.88,
+  214: 59.06,
+  215: 168.75,
+  216: 89.98,
+  217: 6.75,
+  218: 23.62,
+  219: 67.48,
+  220: 2.98,
+  221: 24.48,
+  222: 58.98,
+  223: 14.98,
+  224: 25.0,
+  225: 29.98,
+  226: 89.98,
+  227: 6.75,
+  228: 23.62,
+  229: 67.48,
+  230: 99.98,
+  231: 7.5,
+  232: 26.24,
+  233: 74.98,
+  234: 299.0,
+  235: 22.43,
+  236: 78.49,
+  237: 224.25,
+  238: 119.0,
+  239: 8.93,
+  240: 31.24,
+  241: 89.25,
+  242: 39.98,
+  243: 14.48,
+  244: 8.98,
+  245: 49.98,
+  246: 19.98,
+  247: 99.0,
+  248: 7.42,
+  249: 25.99,
+  250: 74.25,
+  251: 299.0,
+  252: 22.43,
+  253: 78.49,
+  254: 224.25,
+  255: 4.98,
+  256: 1351.25,
+  257: 95.0,
+  258: 332.5,
+  259: 950.0,
+  260: 111.55,
+  261: 17250.0,
+  262: 414.0,
+  263: 1449.0,
+  264: 4140.0,
+  265: 287.5,
+  266: 253.0,
+  267: 18.98,
+  268: 66.41,
+  269: 189.75,
+  270: 24.98,
+  271: 149.0,
+  272: 11.18,
+  273: 39.11,
+  274: 111.75,
+  275: 199.0,
+  276: 11.85,
+  277: 41.48,
+  278: 118.5,
+  279: 18.98,
+  280: 24.98,
+  281: 6.98,
+  282: 8.98,
+  283: 6.98,
+  284: 8.98,
+  285: 229.0,
+  286: 17.18,
+  287: 60.11,
+  288: 171.75,
+  289: 39.98,
+  290: 185.0,
+  291: 285.0,
+  292: 385.0,
+  293: 225.0,
+  294: 2100.0,
+  295: 100.8,
+  296: 352.8,
+  297: 1008.0,
+  298: 1399.0,
+  299: 67.15,
+  300: 235.03,
+  301: 671.52,
+  302: 1999.0,
+  303: 95.95,
+  304: 335.83,
+  305: 959.52,
+  306: 2699.0,
+  307: 80.97,
+  308: 283.39,
+  309: 809.7,
+  310: 2299.0,
+  311: 110.35,
+  312: 386.23,
+  313: 1103.52,
+  314: 599.0,
+  315: 28.75,
+  316: 100.63,
+  317: 287.52,
+  318: 649.0,
+  319: 31.15,
+  320: 109.03,
+  321: 311.52,
+  322: 1399.0,
+  323: 67.15,
+  324: 235.03,
+  325: 671.52,
+  326: 3999.0,
+  327: 119.97,
+  328: 419.89,
+  329: 1199.7,
+  330: 6069.0,
+  331: 182.07,
+  332: 637.25,
+  333: 1820.7,
+  334: 699.0,
+  335: 33.55,
+  336: 117.43,
+  337: 335.52,
+  338: 699.0,
+  339: 33.55,
+  340: 117.43,
+  341: 335.52,
+  342: 1299.0,
+  343: 62.35,
+  344: 218.23,
+  345: 623.52,
+  346: 99.0,
+  347: 129.0,
+  348: 981.25,
+  349: 30.63,
+  350: 107.21,
+  351: 306.3,
+  352: 499.0,
+  353: 14.25,
+  354: 49.88,
+  355: 142.5,
+  356: 39.98,
+  357: 39.98,
+  358: 3.98,
+  359: 550.0,
+  360: 34.38,
+  361: 120.33,
+  362: 343.8,
+  363: 7374.99,
+  364: 220.0,
+  365: 770.0,
+  366: 2200.0,
+  367: 18470.0,
+  368: 450.0,
+  369: 1575.0,
+  370: 4500.0,
+  371: 23110.0,
+  372: 600.0,
+  373: 2100.0,
+  374: 6000.0,
+  375: 245.0,
+  376: 15.31,
+  377: 53.59,
+  378: 153.1,
+  379: 584.99,
+  380: 36.56,
+  381: 127.96,
+  382: 365.6,
+  383: 14.44,
+  384: 12.0,
+  385: 53.99,
+  386: 995.0,
+  387: 62.19,
+  388: 217.67,
+  389: 621.9,
+  390: 2500.0,
+  391: 156.25,
+  392: 546.88,
+  393: 1562.5,
+  394: 1200.0,
+  395: 75.0,
+  396: 262.5,
+  397: 750.0,
+  398: 9844.99,
+  399: 350.0,
+  400: 1225.0,
+  401: 3500.0,
+  402: 89.99,
+  403: 5.62,
+  404: 19.67,
+  405: 56.2,
+  406: 89.99,
+  407: 5.62,
+  408: 19.67,
+  409: 56.2,
+  410: 3528.88,
+  411: 150.0,
+  412: 525.0,
+  413: 1500.0,
+  414: 16.03,
+  415: 29.99,
+  416: 153.0,
+  417: 9.56,
+  418: 33.46,
+  419: 95.6,
+  420: 29.98,
+  421: 262.0,
+  422: 16.38,
+  423: 57.33,
+  424: 163.8,
+  425: 41.89,
+  426: 14.99,
+  427: 59.99,
+  428: 24.99,
+  429: 10.0,
+  430: 14.98,
+  431: 114.66,
+  432: 7.17,
+  433: 25.1,
+  434: 71.7,
+  435: 20.84,
+  436: 260.0,
+  437: 16.25,
+  438: 56.88,
+  439: 162.5,
+  440: 269.55,
+  441: 16.85,
+  442: 58.98,
+  443: 168.5,
+  444: 3.0,
+  445: 199.0,
+  446: 25.99,
+  447: 25.99,
+  448: 600.0,
+  449: 37.5,
+  450: 131.25,
+  451: 375.0,
+  452: 29.98,
+  453: 59.97,
+  454: 109.95,
+  455: 23.72,
+  456: 34.99,
+  457: 2.97,
+  458: 9.47,
+  459: 14.92,
+  460: 11.47,
+  461: 59.98,
+  462: 89.0,
+  463: 2000.0,
+  464: 110.0,
+  465: 385.0,
+  466: 1100.0,
+  467: 600.0,
+  468: 37.5,
+  469: 131.25,
+  470: 375.0,
+  471: 297.99,
+  472: 18.62,
+  473: 65.17,
+  474: 186.2,
+  475: 200.0,
+  476: 12.5,
+  477: 43.75,
+  478: 125.0,
+  479: 32.99,
+  480: 103.76,
+  481: 148.0,
+  482: 9.25,
+  483: 32.38,
+  484: 92.5,
+  485: 68.62,
+  486: 64.99,
+  487: 4.06,
+  488: 14.21,
+  489: 40.6,
+  490: 274.0,
+  491: 17.13,
+  492: 59.96,
+  493: 171.3,
+  494: 25.07,
+  495: 19.97,
+  496: 98.0,
+  497: 6.13,
+  498: 21.46,
+  499: 61.3,
+  500: 49.98,
+  501: 34.98,
+  502: 49.95,
+  503: 25.99,
+  504: 118.0,
+  505: 825.0,
+  506: 51.56,
+  507: 180.46,
+  508: 515.6,
+  509: 480.44,
+  510: 30.03,
+  511: 105.11,
+  512: 300.3,
+  513: 29.98,
+  514: 559.99,
+  515: 35.0,
+  516: 122.5,
+  517: 350.0,
+  518: 79.99,
+  519: 5.0,
+  520: 17.5,
+  521: 50.0,
+  522: 243.01,
+  523: 43.98,
+  524: 887.0,
+  525: 55.44,
+  526: 194.04,
+  527: 554.4,
+  528: 247.42,
+  529: 15.46,
+  530: 54.11,
+  531: 154.6,
+  532: 295.0,
+  533: 18.44,
+  534: 64.54,
+  535: 184.4,
+  536: 6.99,
+  537: 350.0,
+  538: 21.88,
+  539: 76.58,
+  540: 218.8,
+  541: 22.98,
+  542: 8394.58,
+  543: 524.66,
+  544: 1836.31,
+  545: 5246.6,
+  546: 69.99,
+  547: 4.37,
+  548: 15.3,
+  549: 43.7,
+  550: 175.0,
+  551: 10.94,
+  552: 38.29,
+  553: 109.4,
+  554: 105.0,
+  555: 949.99,
+  556: 59.37,
+  557: 207.8,
+  558: 593.7,
+  559: 76.0,
+  560: 3.8,
+  561: 13.3,
+  562: 38.0,
+  563: 10999.0,
+  564: 549.95,
+  565: 1924.9,
+  566: 5499.0,
+  567: 330.0,
+  568: 16.5,
+  569: 57.75,
+  570: 165.0,
+  571: 74.99,
+  572: 3.8,
+  573: 13.1,
+  574: 38.0,
+  575: 1400.0,
+  576: 70.0,
+  577: 245.0,
+  578: 700.0,
+  579: 649.0,
+  580: 32.45,
+  581: 113.57,
+  582: 324.5,
+  583: 129.99,
+  584: 6.49,
+  585: 22.74,
+  586: 64.9,
+  587: 399.0,
+  588: 19.95,
+  589: 69.82,
+  590: 199.5,
+  591: 999.0,
+  592: 49.95,
+  593: 174.82,
+  594: 499.5,
+  595: 99.0,
+  596: 4.95,
+  597: 17.4,
+  598: 49.5,
+  599: 149.99,
+  600: 7.49,
+  601: 26.24,
+  602: 74.9,
+  603: 128.0,
+  604: 6.4,
+  605: 22.4,
+  606: 64.0,
+  607: 148.0,
+  608: 154.99,
+  609: 7.74,
+  610: 21.12,
+  611: 77.4,
+  612: 7.5,
+  613: 0.9,
+  614: 3.15,
+  615: 9.0,
+  616: 11.25,
+  617: 1.35,
+  618: 4.72,
+  619: 13.5,
+  620: 12.5,
+  621: 1.5,
+  622: 5.25,
+  623: 15.0,
+  624: 5.0,
+  625: 0.6,
+  626: 2.1,
+  627: 6.0,
+  628: 25.0,
+  629: 3.0,
+  630: 10.5,
+  631: 30.0,
+  632: 12.25,
+  633: 1.47,
+  634: 5.14,
+  635: 14.7,
+  636: 11.75,
+  637: 1.41,
+  638: 4.93,
+  639: 14.1,
+  640: 50.75,
+  641: 6.09,
+  642: 21.32,
+  643: 60.9,
+  644: 82.25,
+  645: 9.87,
+  646: 34.55,
+  647: 98.7,
+  648: 17.49,
+  649: 2.1,
+  650: 7.35,
+  651: 20.99,
+  652: 9.5,
+  653: 1.14,
+  654: 3.99,
+  655: 11.4,
+  656: 9.0,
+  657: 1.08,
+  658: 3.78,
+  659: 10.8,
+  660: 10.25,
+  661: 1.23,
+  662: 4.3,
+  663: 12.3,
+  664: 90.25,
+  665: 10.83,
+  666: 37.91,
+  667: 108.3,
+  668: 14.55,
+  669: 1.75,
+  670: 6.11,
+  671: 17.46,
+  672: 50.0,
+  673: 6.0,
+  674: 21.0,
+  675: 60.0,
+  676: 36.25,
+  677: 4.35,
+  678: 15.22,
+  679: 43.5,
+  680: 36.5,
+  681: 4.38,
+  682: 15.33,
+  683: 43.8,
+  684: 51.5,
+  685: 6.18,
+  686: 21.63,
+  687: 61.8,
+  688: 70.75,
+  689: 8.49,
+  690: 29.71,
+  691: 84.9,
+  692: 121.25,
+  693: 14.55,
+  694: 50.92,
+  695: 145.5,
+  696: 19.5,
+  697: 2.34,
+  698: 8.19,
+  699: 23.4,
+  700: 90.25,
+  701: 10.83,
+  702: 37.91,
+  703: 108.3,
+  704: 194.5,
+  705: 23.34,
+  706: 81.69,
+  707: 233.4,
+  708: 13.25,
+  709: 1.59,
+  710: 5.57,
+  711: 15.9,
+  712: 66.25,
+  713: 7.95,
+  714: 27.82,
+  715: 79.5,
+  716: 120.5,
+  717: 14.46,
+  718: 50.61,
+  719: 144.6,
+  720: 132.25,
+  721: 15.87,
+  722: 55.55,
+  723: 158.7,
+  724: 11.0,
+  725: 1.32,
+  726: 4.62,
+  727: 13.2,
+  728: 50.0,
+  729: 6.0,
+  730: 21.0,
+  731: 60.0,
+  732: 20.0,
+  733: 2.4,
+  734: 8.4,
+  735: 24.0,
+  736: 7.75,
+  737: 0.93,
+  738: 3.25,
+  739: 9.3,
+  740: 20.85,
+  741: 2.5,
+  742: 8.76,
+  743: 25.02,
+  744: 3.5,
+  745: 0.42,
+  746: 1.47,
+  747: 4.2,
+  748: 231.0,
+  749: 27.72,
+  750: 97.02,
+  751: 277.2,
+  752: 93.25,
+  753: 11.19,
+  754: 39.16,
+  755: 111.9,
+  756: 399.0,
+  757: 47.88,
+  758: 167.58,
+  759: 478.8,
+  760: 12.25,
+  761: 1.47,
+  762: 5.14,
+  763: 14.7,
+  764: 12.25,
+  765: 1.47,
+  766: 5.14,
+  767: 14.7,
+  768: 75.0,
+  769: 9.0,
+  770: 31.5,
+  771: 90.0,
+  772: 215.19,
+  773: 25.82,
+  774: 90.38,
+  775: 258.23,
+  776: 237.0,
+  777: 28.44,
+  778: 99.54,
+  779: 284.4,
+  780: 35.75,
+  781: 4.29,
+  782: 15.02,
+  783: 42.9,
+  784: 9.0,
+  785: 1.08,
+  786: 3.78,
+  787: 10.8,
+  788: 24.75,
+  789: 2.97,
+  790: 10.39,
+  791: 29.7,
+  792: 631.55,
+  793: 85.0,
+  794: 10.5,
+  795: 10.5,
+  796: 1.0,
+  797: 130.0,
+  798: 5.83,
+  799: 80.0,
+  800: 7.5,
+  801: 180.0,
+  802: 7.5,
+  803: 180.0,
+  804: 11.76,
+  805: 130.0,
+  806: 2.5,
+  807: 0.6,
+  808: 18.95,
+  809: 37.51,
+  810: 25.95,
+  811: 23.95,
+  812: 560.0,
+  813: 109.99,
+  814: 22.0,
+  815: 2.6,
+  816: 8.1,
+  817: 190.0,
+  818: 465.75,
+  819: 24.5,
+  820: 17.25,
+  821: 26.99,
+  822: 2.7,
+  823: 19.99,
+  824: 24.95,
+  825: 0.5,
+  826: 110.0,
+  827: 4.4,
+  828: 107.16,
+  829: 12.0,
+  830: 7.5,
+  831: 180.0,
+  832: 3.1,
+  833: 153.6,
+  834: 10.3,
+  835: 210.0,
+  836: 4.2,
+  837: 1200.0,
+  838: 40.0,
+  839: 31.75,
+  840: 27.99,
+  841: 168.61,
+  842: 4.6,
+  843: 86.0,
+  844: 8.0,
+  845: 79.0,
+  846: 11.0,
+  847: 11.0,
+  848: 42.0,
+  849: 1.75,
+  850: 90.0,
+  851: 0.9,
+  852: 8.47,
+  853: 15.75,
+  854: 7.98,
+  855: 37.95,
+  856: 18.75,
+  857: 35.0,
+  858: 2.51,
+  859: 44.0,
+  860: 309.12,
+  861: 10.99,
+  862: 26.99,
+  863: 85.0,
+  864: 210.0,
+  865: 10.5,
+  866: 5.48,
+  867: 5.99,
+  868: 8.2,
+  869: 198.0,
+  870: 4.95,
+  871: 65.0,
+  872: 37.98,
+  873: 99.98,
+  874: 5.0,
+  875: 197.29,
+  876: 16.5,
+  877: 325.0,
+  878: 46.99,
+  879: 29.0,
+  880: 41.8,
+  881: 117.99,
+  882: 47.03,
+  883: 94.02,
+  884: 39.6,
+  885: 83.76,
+  886: 77.7,
+  887: 78.1,
+  888: 46.99,
+  889: 15.98,
+  890: 5.68,
+  891: 18.98,
+  892: 11.97,
+  893: 2200.0,
+  894: 4500.0,
+  895: 320.0,
+  896: 260.0,
+  897: 180.0,
+  898: 95.0,
+  899: 650.0,
+  900: 220.0,
+  901: 45.0,
+  902: 85.0,
+  903: 95.0,
+  904: 45.0,
+  905: 750.0,
+  906: 395.0,
+  907: 32.0,
+  908: 22.0,
+  909: 28.0,
+  910: 165.0,
+  911: 38.0,
+  912: 32.0,
+  913: 42.0,
+  914: 18.0,
+  915: 749.0,
+  916: 299.0,
+  917: 749.0,
+  918: 189.0,
+  919: 259.0,
+  920: 169.0,
+  921: 329.0,
+  922: 179.0,
+  923: 49.0,
+  924: 69.0,
+  925: 22.0,
+  926: 39.0,
+  927: 25.0,
+  928: 79.0,
+  929: 18.0,
+  930: 28.0,
+  931: 32.0,
+  932: 69.0,
+  933: 59.0,
+  934: 16.0,
+  935: 22.0,
+  936: 59.0,
+  937: 29.0,
+  938: 899.0,
+  939: 2450.0,
+  940: 259.0,
+  941: 45.0,
+  942: 52.0,
+  943: 32.0,
+  944: 32.0,
+  945: 49.0,
+  946: 1450.0,
+  947: 289.0,
+  948: 79.0,
+  949: 6.5,
+  950: 22.0,
+  951: 42.0,
+  952: 9.5,
+  953: 89.0,
+  954: 79.0,
+  955: 18.0,
+  956: 139.0,
+  957: 28.0,
+  958: 14.0,
+  959: 32.0,
+  960: 22.0,
+  961: 26.0,
+  962: 389.0,
+  963: 24.0,
+  964: 59.0,
+  965: 469.0,
+  966: 79.0,
+  967: 89.0,
+  968: 649.0,
+  969: 189.0,
+  970: 1150.0,
+  971: 1450.0,
+  972: 319.0,
+  973: 42.0,
+  974: 32.0,
+  975: 189.0,
+  976: 1250.0,
+};
+
+// ---- Item IDs ----
+// Each CATALOG entry carries its own unique id (matches the Master Price List's
+// ID column and the published Google Sheet). ID is the primary key everywhere —
+// name+unit is NOT guaranteed unique across categories in the master list
+// (e.g. "Skill Saw/Circular Saw" exists in both Power Tools and Hilti Power Tools
+// at different prices), so all lookups below key off id.
+const ITEM_BY_ID = {};
+(function indexCatalogById(){
+  for(const cat in CATALOG){
+    CATALOG[cat].forEach(item=>{ ITEM_BY_ID[item.id] = {...item, category:cat}; });
+  }
+})();
+
+// ---- Live price overrides pulled from a published Google Sheet CSV ----
+// PRICES above is the fallback baseline (last-known-good, baked into this file),
+// keyed by id. LIVE_PRICES holds anything successfully pulled from the sheet;
+// it wins when present, also keyed by id.
+let LIVE_PRICES = {};
+const SHEET_URL_KEY = 'salcoPriceSheetUrl';
+const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRwJoai6aqLC717iNM4_qvdIVT6PuWi08ZcQgIveeiKmEeTlwmz5OHSLZEQrcXAh_TD160uULnperZn/pub?gid=815478259&single=true&output=csv';
+const SHEET_CACHE_KEY = 'salcoPriceSheetCache';
+
+function getSheetUrl(){
+  try { return localStorage.getItem(SHEET_URL_KEY) || DEFAULT_SHEET_URL; } catch(e){ return DEFAULT_SHEET_URL; }
+}
+function setSheetUrl(url){
+  try { localStorage.setItem(SHEET_URL_KEY, url); } catch(e){}
+}
+function loadCachedPrices(){
+  try {
+    const raw = localStorage.getItem(SHEET_CACHE_KEY);
+    if(raw){ LIVE_PRICES = JSON.parse(raw); }
+  } catch(e){}
+}
+function saveCachedPrices(){
+  try { localStorage.setItem(SHEET_CACHE_KEY, JSON.stringify(LIVE_PRICES)); } catch(e){}
+}
+
+// Minimal CSV parser (handles quoted fields with commas, per Google Sheets export format)
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i], next = text[i+1];
+    if(inQuotes){
+      if(c === '"' && next === '"'){ field += '"'; i++; }
+      else if(c === '"'){ inQuotes = false; }
+      else { field += c; }
+    } else {
+      if(c === '"'){ inQuotes = true; }
+      else if(c === ','){ row.push(field); field=''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c === '\r'){ /* skip */ }
+      else { field += c; }
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+// Expects columns: ID, Category, Item Name, Unit, Price (header row required, matches the
+// Master Price List layout). Matches strictly by ID — name+unit is not a safe fallback
+// here since it's not unique across categories in the master list, so rows without a
+// recognized ID are skipped.
+function applyCSVPrices(csvText){
+  const rows = parseCSV(csvText);
+  if(!rows.length) return 0;
+  const header = rows[0].map(h=>h.trim().toLowerCase());
+  const idCol = header.indexOf('id');
+  const priceCol = header.indexOf('price');
+  if(priceCol === -1 || idCol === -1) return 0;
+
+  let updated = {};
+  for(let r=1; r<rows.length; r++){
+    const row = rows[r];
+    if(!row || row.every(f=>f.trim()==='')) continue;
+    const rawPrice = (row[priceCol]||'').replace(/[^0-9.\-]/g,'');
+    if(rawPrice === '') continue;
+    const price = parseFloat(rawPrice);
+    if(isNaN(price)) continue;
+    const id = parseInt((row[idCol]||'').trim(), 10);
+    if(!id || !ITEM_BY_ID[id]) continue;
+    updated[id] = price;
+  }
+  LIVE_PRICES = updated;
+  saveCachedPrices();
+  return Object.keys(updated).length;
+}
+
+async function refreshLivePrices(){
+  const url = getSheetUrl();
+  const statusEl = document.getElementById('settingsStatus');
+  if(!url){
+    if(statusEl){ statusEl.textContent = 'No sheet URL set — using prices built into the app.'; statusEl.className = 'settings-status pending'; }
+    return false;
+  }
+  if(statusEl){ statusEl.textContent = 'Refreshing from sheet…'; statusEl.className = 'settings-status pending'; }
+  try {
+    const res = await fetch(url, {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const count = applyCSVPrices(text);
+    if(statusEl){ statusEl.textContent = `Loaded ${count} prices from the sheet (just now).`; statusEl.className = 'settings-status ok'; }
+    renderItems();
+    return true;
+  } catch(e){
+    if(statusEl){ statusEl.textContent = 'Could not reach the sheet — using the last cached prices.'; statusEl.className = 'settings-status err'; }
+    return false;
+  }
+}
+
+function getPrice(id){
+  if(typeof LIVE_PRICES[id] === 'number') return LIVE_PRICES[id];
+  const p = PRICES[id];
+  return (typeof p === 'number') ? p : null;
+}
+function fmtMoney(n){ return '$' + n.toFixed(2); }
+
+let direction = "OUT";
+let cart = [];
+let activeCategory = "All";
+let risk = null, dop = null;
+
+const mainView = document.getElementById('mainView');
+const chipRow = document.getElementById('chipRow');
+const searchInput = document.getElementById('searchInput');
+
+function buildChips(){
+  const cats = ["All", ...Object.keys(CATALOG)];
+  chipRow.innerHTML = cats.map(c => `<button class="chip ${c===activeCategory?'active':''}" data-cat="${c}">${c}</button>`).join('');
+  chipRow.querySelectorAll('.chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      activeCategory = chip.dataset.cat;
+      buildChips();
+      renderItems();
+    });
+  });
+}
+
+function findCartQty(id){
+  const c = cart.find(c=>c.id===id);
+  return c ? c.qty : 0;
+}
+
+function renderItems(){
+  const q = searchInput.value.trim().toLowerCase();
+  let html = '';
+  const catsToShow = activeCategory === "All" ? Object.keys(CATALOG) : [activeCategory];
+  catsToShow.forEach(cat=>{
+    const items = CATALOG[cat].filter(item=> !q || item.name.toLowerCase().includes(q));
+    if(items.length === 0) return;
+    html += `<div class="cat-block"><div class="cat-title">${cat}</div>`;
+    items.forEach(item=>{
+      const { id, name, unit } = item;
+      const inCart = findCartQty(id);
+      const price = getPrice(id);
+      html += `
+        <div class="item-row">
+          <div>
+            <div class="iname">${name}</div>
+            <div class="iunit">#${id} · ${unit}${price!==null ? ` · <span style="color:var(--red-dark);font-weight:700;">${fmtMoney(price)}</span>` : ''}${inCart ? ` · <strong style="color:var(--red)">${inCart} in cart</strong>` : ''}</div>
+          </div>
+          <button class="add-item-btn" data-id="${id}">+</button>
+        </div>`;
+    });
+    html += `</div>`;
+  });
+  if(!html){ html = `<div class="no-results">No items match "${searchInput.value}".</div>`; }
+  mainView.innerHTML = html;
+  mainView.querySelectorAll('.add-item-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      addToCart(+btn.dataset.id);
+      renderItems();
+      updateFab();
+    });
+  });
+}
+
+function addToCart(id){
+  const existing = cart.find(c=>c.id===id);
+  if(existing){ existing.qty += 1; }
+  else{
+    const item = ITEM_BY_ID[id];
+    if(!item) return;
+    cart.push({id, name:item.name, unit:item.unit, category:item.category, qty:1, price:getPrice(id)});
+  }
+}
+
+function updateFab(){
+  document.getElementById('fabCount').textContent = cart.reduce((s,c)=>s+c.qty,0);
+}
+
+searchInput.addEventListener('input', renderItems);
+
+document.getElementById('dirOut').addEventListener('click', ()=>{
+  direction='OUT';
+  document.getElementById('dirOut').classList.add('active');
+  document.getElementById('dirIn').classList.remove('active');
+});
+document.getElementById('dirIn').addEventListener('click', ()=>{
+  direction='IN';
+  document.getElementById('dirIn').classList.add('active');
+  document.getElementById('dirOut').classList.remove('active');
+});
+
+const checkoutOverlay = document.getElementById('checkoutOverlay');
+document.getElementById('cartFab').addEventListener('click', ()=>{
+  renderCartModal();
+  const d = new Date();
+  document.getElementById('reportDate').value = d.toLocaleDateString('en-CA');
+  checkoutOverlay.classList.add('open');
+});
+document.getElementById('cancelCheckout').addEventListener('click', ()=>{
+  checkoutOverlay.classList.remove('open');
+});
+
+function renderCartModal(){
+  document.getElementById('modalCartCount').textContent = cart.length;
+  const list = document.getElementById('cartList');
+  if(cart.length === 0){
+    list.innerHTML = `<li class="empty-cart">Cart is empty — tap "+" next to items to add them.</li>`;
+    const totalEl = document.getElementById('cartRunningTotal');
+    if(totalEl) totalEl.remove();
+    return;
+  }
+  list.innerHTML = cart.map((c,i)=>{
+    const priceStr = (c.price!==null && c.price!==undefined) ? ` · ${fmtMoney(c.price)}/${c.unit} · <strong>${fmtMoney(c.price*c.qty)}</strong>` : ` · price TBD`;
+    return `
+    <li class="cart-row">
+      <div class="info">
+        <div class="iname">${c.name}</div>
+        <div class="imeta">${c.category} · ${c.unit}${priceStr}</div>
+      </div>
+      <div class="stepper-sm">
+        <button type="button" data-act="dec" data-idx="${i}">−</button>
+        <span>${c.qty}</span>
+        <button type="button" data-act="inc" data-idx="${i}">+</button>
+      </div>
+      <button class="remove-btn" data-act="rm" data-idx="${i}">✕</button>
+    </li>
+  `;}).join('');
+  list.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = +btn.dataset.idx, act = btn.dataset.act;
+      if(act==='inc') cart[idx].qty++;
+      if(act==='dec'){ cart[idx].qty--; if(cart[idx].qty<=0) cart.splice(idx,1); }
+      if(act==='rm') cart.splice(idx,1);
+      renderCartModal();
+      updateFab();
+      renderItems();
+    });
+  });
+
+  const known = cart.filter(c=>c.price!==null && c.price!==undefined);
+  const unpriced = cart.length - known.length;
+  const runningTotal = known.reduce((s,c)=>s+c.price*c.qty,0);
+  let totalEl = document.getElementById('cartRunningTotal');
+  if(!totalEl){
+    totalEl = document.createElement('div');
+    totalEl.id = 'cartRunningTotal';
+    list.insertAdjacentElement('afterend', totalEl);
+  }
+  totalEl.style.cssText = 'text-align:right;padding:10px 2px;font-weight:800;font-size:15px;';
+  totalEl.innerHTML = `Estimated Total: ${fmtMoney(runningTotal)}${unpriced ? ` <span style="color:var(--gray);font-weight:400;font-size:12.5px;">(${unpriced} item${unpriced>1?'s':''} without a price)</span>` : ''}`;
+}
+
+document.querySelectorAll('#scopeGroup .toggle-opt').forEach(btn=>{
+  btn.addEventListener('click', ()=>{ btn.classList.toggle('selected'); });
+});
+document.querySelectorAll('#riskGroup .toggle-opt').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#riskGroup .toggle-opt').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    risk = btn.dataset.risk;
+  });
+});
+document.querySelectorAll('#dopGroup .toggle-opt').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#dopGroup .toggle-opt').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    dop = btn.dataset.dop;
+  });
+});
+
+document.getElementById('generateReportBtn').addEventListener('click', ()=>{
+  if(cart.length === 0){ alert('Add at least one item before generating a report.'); return; }
+
+  const jobName = document.getElementById('jobName').value || '—';
+  const jobNumber = document.getElementById('jobNumber').value || '—';
+  const poNumber = document.getElementById('poNumber').value || '—';
+  const reportDate = document.getElementById('reportDate').value || '—';
+  const personName = document.getElementById('personName').value || '—';
+  const crewSize = document.getElementById('crewSize').value || '—';
+  const scopeSelected = Array.from(document.querySelectorAll('#scopeGroup .toggle-opt.selected')).map(b=>b.dataset.scope).join(', ') || '—';
+  const riskSelected = risk || '—';
+  const dopSelected = dop || '—';
+
+  let currentCat = '';
+  let grandTotal = 0;
+  let hasUnpriced = false;
+  const rows = cart.map(c=>{
+    let catRow = '';
+    if(c.category !== currentCat){
+      currentCat = c.category;
+      catRow = `<tr><td colspan="5" class="cat-td">${currentCat}</td></tr>`;
+    }
+    const priced = (c.price!==null && c.price!==undefined);
+    if(priced){ grandTotal += c.price * c.qty; } else { hasUnpriced = true; }
+    const priceCell = priced ? `<td>${fmtMoney(c.price)}</td>` : `<td class="blank">_______</td>`;
+    const totalCell = priced ? `<td>${fmtMoney(c.price*c.qty)}</td>` : `<td class="blank">_______</td>`;
+    return catRow + `
+      <tr>
+        <td>${c.name}</td>
+        <td>${c.qty}</td>
+        <td>${c.unit}</td>
+        ${priceCell}
+        ${totalCell}
+      </tr>`;
+  }).join('');
+  const grandTotalRow = `
+    <tr>
+      <td colspan="3"></td>
+      <td style="font-weight:800;text-align:right;">Total</td>
+      <td style="font-weight:800;">${fmtMoney(grandTotal)}</td>
+    </tr>`;
+
+  document.getElementById('reportSheet').innerHTML = `
+    <div class="report-header">
+      <div>
+        <div class="co">Salco Group Construction Ltd.</div>
+        <h1>Shop Pick Sheet</h1>
+      </div>
+      <div class="direction-badge ${direction==='OUT'?'out':'in'}">${direction}</div>
+    </div>
+    <div class="meta-fields">
+      <div class="meta-field"><label>Job Name</label><div class="val">${jobName}</div></div>
+      <div class="meta-field"><label>Job #</label><div class="val">${jobNumber}</div></div>
+      <div class="meta-field"><label>PO #</label><div class="val">${poNumber}</div></div>
+      <div class="meta-field"><label>Date</label><div class="val">${reportDate}</div></div>
+      <div class="meta-field"><label>Person Taking/Returning Materials</label><div class="val">${personName}</div></div>
+      <div class="meta-field"><label>Crew Size</label><div class="val">${crewSize}</div></div>
+      <div class="meta-field"><label>Scope</label><div class="val">${scopeSelected}</div></div>
+      <div class="meta-field"><label>Risk Level</label><div class="val">${riskSelected}</div></div>
+      <div class="meta-field"><label>DOP</label><div class="val">${dopSelected}</div></div>
+    </div>
+    <table class="report-table">
+      <thead>
+        <tr><th>Item</th><th>Qty</th><th>Unit</th><th class="price-col">Unit Price</th><th class="total-col">Total</th></tr>
+      </thead>
+      <tbody>${rows}${grandTotalRow}</tbody>
+    </table>
+    <div class="report-note">${hasUnpriced ? 'Prices shown are Abatement Technologies list price + markup where available; blank lines still need office pricing.' : 'Prices shown are Abatement Technologies list price + markup.'}</div>
+    <div class="report-footer">
+      <div class="sig-line">Project Manager/Supervisor's Name</div>
+      <div class="sig-line">Shop Signature</div>
+    </div>
+  `;
+
+  checkoutOverlay.classList.remove('open');
+  document.querySelector('.search-bar').style.display = 'none';
+  document.querySelector('.chip-row').style.display = 'none';
+  mainView.style.display = 'none';
+  document.getElementById('reportView').classList.add('open');
+});
+
+document.getElementById('backToCartBtn').addEventListener('click', ()=>{
+  document.getElementById('reportView').classList.remove('open');
+  document.querySelector('.search-bar').style.display = 'block';
+  document.querySelector('.chip-row').style.display = 'flex';
+  mainView.style.display = 'block';
+});
+
+document.getElementById('printBtn').addEventListener('click', ()=>{ window.print(); });
+
+// ---- Settings modal (price sheet URL) ----
+const settingsOverlay = document.getElementById('settingsOverlay');
+document.getElementById('settingsBtn').addEventListener('click', ()=>{
+  document.getElementById('sheetUrlInput').value = getSheetUrl();
+  const statusEl = document.getElementById('settingsStatus');
+  const cachedCount = Object.keys(LIVE_PRICES).length;
+  statusEl.textContent = cachedCount ? `Currently using ${cachedCount} live prices from the sheet.` : 'No live prices loaded yet — using prices built into the app.';
+  statusEl.className = 'settings-status pending';
+  settingsOverlay.classList.add('open');
+});
+document.getElementById('settingsCancelBtn').addEventListener('click', ()=>{
+  settingsOverlay.classList.remove('open');
+});
+document.getElementById('settingsSaveBtn').addEventListener('click', async ()=>{
+  const url = document.getElementById('sheetUrlInput').value.trim();
+  setSheetUrl(url);
+  await refreshLivePrices();
+});
+document.getElementById('settingsRefreshBtn').addEventListener('click', async ()=>{
+  await refreshLivePrices();
+});
+
+// Load cached prices immediately (no flash of missing prices), then try a fresh pull.
+loadCachedPrices();
+buildChips();
+renderItems();
+updateFab();
+refreshLivePrices();
+</script>
+</body>
+</html>
