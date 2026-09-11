@@ -249,6 +249,7 @@
         <button type="button" id="dirOut" class="active">OUT</button>
         <button type="button" id="dirIn">IN</button>
       </div>
+      <button type="button" id="historyBtn" class="settings-btn" title="Pick history">📋</button>
       <button type="button" id="settingsBtn" class="settings-btn" title="Price sheet settings">⚙️</button>
     </div>
     <div class="hazard-edge"></div>
@@ -281,6 +282,8 @@
         <div class="field"><label>Job Name</label><input type="text" id="jobName" placeholder="e.g. Adams Residence"></div>
         <div class="field"><label>Job #</label><input type="text" id="jobNumber" placeholder="e.g. SGD-26-298"></div>
       </div>
+      <button type="button" id="pullLastOutBtn" class="clear-cart-btn" style="display:none;margin-bottom:10px;">↺ Pull last OUT for this job #</button>
+      <div id="pullOutStatus" class="settings-status"></div>
       <div class="row">
         <div class="field"><label>PO #</label><input type="text" id="poNumber"></div>
         <div class="field"><label>Date</label><input type="text" id="reportDate"></div>
@@ -339,6 +342,36 @@
         <button class="btn-secondary" id="settingsCancelBtn" type="button">Close</button>
         <button class="btn-secondary" id="settingsRefreshBtn" type="button">Refresh Now</button>
         <button class="btn-primary" id="settingsSaveBtn" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="historyOverlay">
+    <div class="modal">
+      <div class="modal-handle"></div>
+
+      <div id="historyLoginView">
+        <h2>Staff Login</h2>
+        <p class="settings-help">Log in with the shared shop account to view pick history.</p>
+        <div class="field" style="margin-bottom:10px;"><label>Email</label><input type="text" id="historyEmail" autocomplete="username"></div>
+        <div class="field" style="margin-bottom:10px;"><label>Password</label><input type="password" id="historyPassword" autocomplete="current-password"></div>
+        <div id="historyLoginStatus" class="settings-status"></div>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="historyCancelBtn" type="button">Close</button>
+          <button class="btn-primary" id="historyLoginBtn" type="button">Log In</button>
+        </div>
+      </div>
+
+      <div id="historyListView" style="display:none;">
+        <div class="cart-panel-actions">
+          <h2>Pick History</h2>
+          <button type="button" class="clear-cart-btn" id="historyLogoutBtn">Log Out</button>
+        </div>
+        <input type="text" id="historySearchInput" placeholder="Search by job name or job #…" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;margin:10px 0;background:#fff;color:var(--ink);">
+        <div id="historyResults"></div>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="historyCloseBtn" type="button">Close</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2501,6 +2534,154 @@ async function savePickHistory(record){
   }
 }
 
+// ---- Staff login (shared account) for viewing pick history ----
+// Session (access + refresh token) is cached in localStorage so staff don't have
+// to log in again every time the app is opened on the same device.
+const AUTH_SESSION_KEY = 'salcoStaffSession';
+let staffSession = null; // {access_token, refresh_token, expires_at}
+
+function loadStaffSession(){
+  try {
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if(raw) staffSession = JSON.parse(raw);
+  } catch(e){}
+}
+function saveStaffSession(session){
+  staffSession = session;
+  try { localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session)); } catch(e){}
+}
+function clearStaffSession(){
+  staffSession = null;
+  try { localStorage.removeItem(AUTH_SESSION_KEY); } catch(e){}
+}
+function isLoggedIn(){
+  return !!(staffSession && staffSession.access_token && staffSession.expires_at > Date.now());
+}
+
+async function staffLogin(email, password){
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data.error_description || data.msg || 'Login failed');
+  saveStaffSession({
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: Date.now() + (data.expires_in * 1000)
+  });
+}
+
+async function staffRefreshSession(){
+  if(!staffSession || !staffSession.refresh_token) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: staffSession.refresh_token })
+    });
+    const data = await res.json();
+    if(!res.ok) return false;
+    saveStaffSession({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: Date.now() + (data.expires_in * 1000)
+    });
+    return true;
+  } catch(e){ return false; }
+}
+
+async function fetchPickHistory(searchTerm){
+  if(!isLoggedIn()){
+    const refreshed = await staffRefreshSession();
+    if(!refreshed) return null; // signals "not logged in" to the caller
+  }
+  let url = `${SUPABASE_URL}/rest/v1/pick_history?select=*&order=created_at.desc&limit=100`;
+  if(searchTerm){
+    const term = encodeURIComponent(`%${searchTerm}%`);
+    url += `&or=(job_name.ilike.${term},job_number.ilike.${term})`;
+  }
+  const res = await fetch(url, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${staffSession.access_token}` }
+  });
+  if(!res.ok) return null;
+  return await res.json();
+}
+
+// Finds the most recent OUT report for a given job number and pre-fills the
+// cart + job fields from it, so staff doing an IN don't retype everything.
+async function pullLastOut(jobNumber){
+  const statusEl = document.getElementById('pullOutStatus');
+  if(!jobNumber || !jobNumber.trim()){
+    statusEl.textContent = 'Enter a Job # first.'; statusEl.className = 'settings-status err';
+    return;
+  }
+  if(!isLoggedIn()){
+    const refreshed = await staffRefreshSession();
+    if(!refreshed){
+      statusEl.textContent = 'Log in (📋 History) to pull past jobs.'; statusEl.className = 'settings-status err';
+      return;
+    }
+  }
+  statusEl.textContent = 'Looking up last OUT…'; statusEl.className = 'settings-status pending';
+  try {
+    const term = encodeURIComponent(jobNumber.trim());
+    const url = `${SUPABASE_URL}/rest/v1/pick_history?select=*&direction=eq.OUT&job_number=eq.${term}&order=created_at.desc&limit=1`;
+    const res = await fetch(url, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${staffSession.access_token}` } });
+    if(!res.ok) throw new Error('lookup failed');
+    const rows = await res.json();
+    if(!rows.length){
+      statusEl.textContent = `No OUT report found for job # "${jobNumber}".`; statusEl.className = 'settings-status err';
+      return;
+    }
+    const r = rows[0];
+    document.getElementById('jobName').value = r.job_name || '';
+    document.getElementById('poNumber').value = r.po_number || '';
+    document.getElementById('personName').value = r.person_name || '';
+    document.getElementById('crewSize').value = r.crew_size || '';
+    if(r.scope){
+      document.querySelectorAll('#scopeGroup .toggle-opt').forEach(b=>b.classList.toggle('selected', r.scope.split(', ').includes(b.dataset.scope)));
+    }
+    if(r.risk){
+      risk = r.risk;
+      document.querySelectorAll('#riskGroup .toggle-opt').forEach(b=>b.classList.toggle('selected', b.dataset.risk===r.risk));
+    }
+    if(r.dop){
+      dop = r.dop;
+      document.querySelectorAll('#dopGroup .toggle-opt').forEach(b=>b.classList.toggle('selected', b.dataset.dop===r.dop));
+    }
+    cart = (r.items || []).map(it => ({...it, price: getPrice(it.id)}));
+    renderCartModal();
+    renderItems();
+    const d = new Date(r.created_at);
+    statusEl.textContent = `Pulled ${cart.length} item${cart.length===1?'':'s'} from OUT on ${d.toLocaleDateString()}. Adjust quantities for anything not being returned.`;
+    statusEl.className = 'settings-status ok';
+  } catch(e){
+    statusEl.textContent = 'Could not pull last OUT — try again.'; statusEl.className = 'settings-status err';
+  }
+}
+
+function renderHistoryResults(rows){
+  const el = document.getElementById('historyResults');
+  if(!rows || rows.length === 0){
+    el.innerHTML = `<div class="empty-cart">No matching reports.</div>`;
+    return;
+  }
+  el.innerHTML = rows.map(r=>{
+    const d = new Date(r.created_at);
+    const itemCount = (r.items || []).length;
+    return `
+      <div class="cart-row" style="align-items:flex-start;">
+        <div class="info">
+          <div class="iname">${r.job_name || '—'} <span style="font-weight:400;color:var(--gray);">#${r.job_number || '—'}</span></div>
+          <div class="imeta">${d.toLocaleDateString()} · ${itemCount} item${itemCount===1?'':'s'} · ${r.total!=null ? fmtMoney(Number(r.total)) : '—'}</div>
+        </div>
+        <span class="in-cart-tag" style="background:${r.direction==='OUT' ? 'var(--red)' : '#2e7d32'};">${r.direction}</span>
+      </div>`;
+  }).join('');
+}
+
 let direction = "OUT";
 let cart = [];
 let activeCategory = "All";
@@ -2580,11 +2761,18 @@ document.getElementById('dirOut').addEventListener('click', ()=>{
   direction='OUT';
   document.getElementById('dirOut').classList.add('active');
   document.getElementById('dirIn').classList.remove('active');
+  document.getElementById('pullLastOutBtn').style.display = 'none';
+  document.getElementById('pullOutStatus').textContent = '';
 });
 document.getElementById('dirIn').addEventListener('click', ()=>{
   direction='IN';
   document.getElementById('dirIn').classList.add('active');
   document.getElementById('dirOut').classList.remove('active');
+  document.getElementById('pullLastOutBtn').style.display = 'inline-block';
+});
+
+document.getElementById('pullLastOutBtn').addEventListener('click', ()=>{
+  pullLastOut(document.getElementById('jobNumber').value);
 });
 
 // Cart panel is always visible now (no FAB / modal to open) — just set today's date once on load.
@@ -2789,8 +2977,69 @@ document.getElementById('settingsRefreshBtn').addEventListener('click', async ()
   await refreshLivePrices();
 });
 
+// ---- History modal (staff login + pick history search) ----
+const historyOverlay = document.getElementById('historyOverlay');
+const historyLoginView = document.getElementById('historyLoginView');
+const historyListView = document.getElementById('historyListView');
+
+function showHistoryList(){
+  historyLoginView.style.display = 'none';
+  historyListView.style.display = 'block';
+  document.getElementById('historySearchInput').value = '';
+  fetchPickHistory('').then(rows=> renderHistoryResults(rows || []));
+}
+
+document.getElementById('historyBtn').addEventListener('click', async ()=>{
+  historyOverlay.classList.add('open');
+  if(isLoggedIn()){
+    showHistoryList();
+  } else {
+    const refreshed = await staffRefreshSession();
+    if(refreshed){ showHistoryList(); }
+    else {
+      historyLoginView.style.display = 'block';
+      historyListView.style.display = 'none';
+      document.getElementById('historyLoginStatus').textContent = '';
+    }
+  }
+});
+document.getElementById('historyCancelBtn').addEventListener('click', ()=>{
+  historyOverlay.classList.remove('open');
+});
+document.getElementById('historyCloseBtn').addEventListener('click', ()=>{
+  historyOverlay.classList.remove('open');
+});
+document.getElementById('historyLoginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('historyEmail').value.trim();
+  const password = document.getElementById('historyPassword').value;
+  const statusEl = document.getElementById('historyLoginStatus');
+  statusEl.textContent = 'Logging in…'; statusEl.className = 'settings-status pending';
+  try {
+    await staffLogin(email, password);
+    document.getElementById('historyPassword').value = '';
+    showHistoryList();
+  } catch(e){
+    statusEl.textContent = 'Login failed — check email and password.'; statusEl.className = 'settings-status err';
+  }
+});
+document.getElementById('historyLogoutBtn').addEventListener('click', ()=>{
+  clearStaffSession();
+  historyListView.style.display = 'none';
+  historyLoginView.style.display = 'block';
+  document.getElementById('historyLoginStatus').textContent = '';
+});
+let historySearchDebounce;
+document.getElementById('historySearchInput').addEventListener('input', (e)=>{
+  clearTimeout(historySearchDebounce);
+  const term = e.target.value.trim();
+  historySearchDebounce = setTimeout(()=>{
+    fetchPickHistory(term).then(rows=> renderHistoryResults(rows || []));
+  }, 300);
+});
+
 // Load cached prices immediately (no flash of missing prices), then try a fresh pull.
 loadCachedPrices();
+loadStaffSession();
 buildChips();
 renderItems();
 renderCartModal();
