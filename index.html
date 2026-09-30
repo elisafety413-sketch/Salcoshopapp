@@ -207,9 +207,10 @@
   }
   .report-header .co{ font-weight:800; font-size:11px; letter-spacing:1px; color:var(--gray); text-transform:uppercase; }
   .report-header h1{ margin:2px 0 0; font-size:21px; }
-  .direction-badge{ font-size:15px; font-weight:800; padding:8px 18px; border-radius:8px; color:#fff; }
+  .direction-badge{ display:inline-block; font-size:15px; font-weight:800; padding:8px 18px; border-radius:8px; color:#fff; }
   .direction-badge.out{ background:var(--red); }
   .direction-badge.in{ background:#2e7d32; }
+  .report-name{ font-size:12px; font-weight:700; color:var(--gray); margin-top:6px; letter-spacing:.3px; }
 
   .meta-fields{ display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; margin-bottom:16px; }
   .meta-field label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--gray); font-weight:700; margin-bottom:3px; }
@@ -2595,7 +2596,16 @@ async function savePickHistory(record){
       },
       body: JSON.stringify(record)
     });
-    if(!res.ok){ console.error('pick_history save failed', res.status, await res.text()); }
+    if(!res.ok){
+      const txt = await res.text();
+      // If the report_name column hasn't been added in Supabase yet, save without it
+      // so no pick is ever lost.
+      if(record.report_name !== undefined && /report_name/.test(txt)){
+        const {report_name, ...rest} = record;
+        return savePickHistory(rest);
+      }
+      console.error('pick_history save failed', res.status, txt);
+    }
   } catch(e){
     console.error('pick_history save error', e);
   }
@@ -2741,7 +2751,8 @@ function renderHistoryResults(rows){
     return `
       <div class="cart-row" style="align-items:flex-start;">
         <div class="info">
-          <div class="iname">${r.job_name || '—'} <span style="font-weight:400;color:var(--gray);">#${r.job_number || '—'}</span></div>
+          <div class="iname">${esc(r.report_name || ((r.job_number||'—') + '-' + (r.direction||'')))}</div>
+          <div class="imeta">${esc(r.job_name || '—')}</div>
           <div class="imeta">${d.toLocaleDateString()} · ${itemCount} item${itemCount===1?'':'s'} · ${r.total!=null ? fmtMoney(Number(r.total)) : '—'}</div>
         </div>
         <span class="in-cart-tag" style="background:${r.direction==='OUT' ? 'var(--red)' : '#2e7d32'};">${r.direction}</span>
@@ -2922,6 +2933,10 @@ document.querySelectorAll('#dopGroup .toggle-opt').forEach(btn=>{
 
 document.getElementById('generateReportBtn').addEventListener('click', ()=>{
   if(cart.length === 0){ alert('Add at least one item before generating a report.'); return; }
+  const jobNumRaw = document.getElementById('jobNumber').value.trim();
+  if(!jobNumRaw){ alert('Enter the Job # before generating a report. It is used to name and look up the report.'); document.getElementById('jobNumber').focus(); return; }
+  const reportName = `${jobNumRaw.toUpperCase().replace(/\s+/g,'-')}-${direction}`;
+  currentReportName = reportName;
 
   const jobName = document.getElementById('jobName').value || '—';
   const jobNumber = document.getElementById('jobNumber').value || '—';
@@ -2968,7 +2983,7 @@ document.getElementById('generateReportBtn').addEventListener('click', ()=>{
         <div class="co">Salco Group Construction Ltd.</div>
         <h1>Shop Pick Sheet</h1>
       </div>
-      <div class="direction-badge ${direction==='OUT'?'out':'in'}">${direction}</div>
+      <div style="text-align:right"><div class="direction-badge ${direction==='OUT'?'out':'in'}">${direction}</div><div class="report-name">${esc(reportName)}</div></div>
     </div>
     <div class="meta-fields">
       <div class="meta-field"><label>Job Name</label><div class="val">${jobName}</div></div>
@@ -2999,6 +3014,7 @@ document.getElementById('generateReportBtn').addEventListener('click', ()=>{
   document.getElementById('reportView').classList.add('open');
 
   savePickHistory({
+    report_name: reportName,
     direction,
     job_name: jobName,
     job_number: jobNumber,
@@ -3020,7 +3036,13 @@ document.getElementById('backToCartBtn').addEventListener('click', ()=>{
   document.querySelector('.workspace').style.display = 'grid';
 });
 
-document.getElementById('printBtn').addEventListener('click', ()=>{ window.print(); });
+let currentReportName = '';
+document.getElementById('printBtn').addEventListener('click', ()=>{
+  const oldTitle = document.title;
+  if(currentReportName) document.title = currentReportName;
+  window.print();
+  setTimeout(()=>{ document.title = oldTitle; }, 1000);
+});
 
 // ---- Settings modal (price sheet URL) ----
 const settingsOverlay = document.getElementById('settingsOverlay');
