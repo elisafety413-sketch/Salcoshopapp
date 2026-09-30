@@ -40,6 +40,8 @@
   }
   header.topbar .toprow{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:14px; }
   header.topbar .brand{ font-size:11px; letter-spacing:2px; font-weight:700; opacity:.82; text-transform:uppercase; }
+  .sheet-stamp{ font-size:11.5px; opacity:.85; padding:0 0 8px; margin-top:-6px; }
+  .sheet-stamp.err{ color:#ffd166; opacity:1; font-weight:700; }
   header.topbar h1{ margin:3px 0 0; font-size:23px; font-weight:800; letter-spacing:.2px; }
   .hazard-edge{
     height:6px; width:100%;
@@ -252,6 +254,7 @@
       <button type="button" id="historyBtn" class="settings-btn" title="Pick history">📋</button>
       <button type="button" id="settingsBtn" class="settings-btn" title="Price sheet settings">⚙️</button>
     </div>
+    <div id="sheetStamp" class="sheet-stamp"></div>
     <div class="hazard-edge"></div>
   </header>
 
@@ -379,7 +382,9 @@
 </div>
 
 <script>
-const CATALOG = {
+// Built-in catalog: offline fallback only. When the published Google Sheet loads,
+// the whole item list (names, units, categories, prices) is rebuilt from it.
+const BUILTIN_CATALOG = {
   "Safety": [
     {id:1, name:"Air Horn", unit:"EA"},
     {id:2, name:"Eye Wash Mist Spray", unit:"EA"},
@@ -2396,12 +2401,16 @@ const PRICES = {
 // name+unit is NOT guaranteed unique across categories in the master list
 // (e.g. "Skill Saw/Circular Saw" exists in both Power Tools and Hilti Power Tools
 // at different prices), so all lookups below key off id.
-const ITEM_BY_ID = {};
-(function indexCatalogById(){
+let CATALOG = BUILTIN_CATALOG;
+let ITEM_BY_ID = {};
+function indexCatalogById(){
+  ITEM_BY_ID = {};
   for(const cat in CATALOG){
     CATALOG[cat].forEach(item=>{ ITEM_BY_ID[item.id] = {...item, category:cat}; });
   }
-})();
+}
+indexCatalogById();
+const BUILTIN_COUNT = Object.keys(ITEM_BY_ID).length;
 
 // ---- Live price overrides pulled from a published Google Sheet CSV ----
 // PRICES above is the fallback baseline (last-known-good, baked into this file),
@@ -2411,6 +2420,9 @@ let LIVE_PRICES = {};
 const SHEET_URL_KEY = 'salcoPriceSheetUrl';
 const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRwJoai6aqLC717iNM4_qvdIVT6PuWi08ZcQgIveeiKmEeTlwmz5OHSLZEQrcXAh_TD160uULnperZn/pub?gid=815478259&single=true&output=csv';
 const SHEET_CACHE_KEY = 'salcoPriceSheetCache';
+const CATALOG_CACHE_KEY = 'salcoCatalogCache';   // {catalog, prices, fetchedAt}
+let SHEET_FETCHED_AT = null;                      // ms timestamp of last good sheet pull
+let SHEET_WARNINGS = [];
 
 function getSheetUrl(){
   try { return localStorage.getItem(SHEET_URL_KEY) || DEFAULT_SHEET_URL; } catch(e){ return DEFAULT_SHEET_URL; }
@@ -2420,12 +2432,22 @@ function setSheetUrl(url){
 }
 function loadCachedPrices(){
   try {
-    const raw = localStorage.getItem(SHEET_CACHE_KEY);
-    if(raw){ LIVE_PRICES = JSON.parse(raw); }
+    const raw = localStorage.getItem(CATALOG_CACHE_KEY);
+    if(raw){
+      const c = JSON.parse(raw);
+      if(c && c.catalog && Object.keys(c.catalog).length){
+        CATALOG = c.catalog; LIVE_PRICES = c.prices || {}; SHEET_FETCHED_AT = c.fetchedAt || null;
+        indexCatalogById();
+        return;
+      }
+    }
+    // Older versions cached prices only
+    const old = localStorage.getItem(SHEET_CACHE_KEY);
+    if(old){ LIVE_PRICES = JSON.parse(old); }
   } catch(e){}
 }
 function saveCachedPrices(){
-  try { localStorage.setItem(SHEET_CACHE_KEY, JSON.stringify(LIVE_PRICES)); } catch(e){}
+  try { localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({catalog:CATALOG, prices:LIVE_PRICES, fetchedAt:SHEET_FETCHED_AT})); } catch(e){}
 }
 
 // Minimal CSV parser (handles quoted fields with commas, per Google Sheets export format)
@@ -2456,27 +2478,63 @@ function parseCSV(text){
 // recognized ID are skipped.
 function applyCSVPrices(csvText){
   const rows = parseCSV(csvText);
-  if(!rows.length) return 0;
+  if(!rows.length) throw new Error('Sheet is empty');
   const header = rows[0].map(h=>h.trim().toLowerCase());
-  const idCol = header.indexOf('id');
-  const priceCol = header.indexOf('price');
-  if(priceCol === -1 || idCol === -1) return 0;
-
-  let updated = {};
+  const col = n => header.indexOf(n);
+  const idCol = col('id'), catCol = col('category'), nameCol = col('item name'), unitCol = col('unit'), priceCol = col('price');
+  if(idCol === -1 || nameCol === -1 || priceCol === -1){
+    throw new Error('Sheet headers must include ID, Item Name and Price');
+  }
+  const catalog = {}, prices = {}, seen = new Set();
+  const warnings = [];
   for(let r=1; r<rows.length; r++){
     const row = rows[r];
     if(!row || row.every(f=>f.trim()==='')) continue;
-    const rawPrice = (row[priceCol]||'').replace(/[^0-9.\-]/g,'');
-    if(rawPrice === '') continue;
+    const get = i => (i === -1 ? '' : (row[i]||'').trim());
+    const name = get(nameCol).replace(/\s+/g,' ');
+    const idRaw = get(idCol);
+    const id = parseInt(idRaw, 10);
+    if(!id || String(id) !== idRaw.replace(/\.0+$/,'')){ if(name) warnings.push(`Row ${r+1} (${name}) has no valid ID — skipped`); continue; }
+    if(!name){ warnings.push(`Row ${r+1} (ID ${id}) has no item name — skipped`); continue; }
+    if(seen.has(id)){ warnings.push(`ID ${id} is used more than once — only the first row kept`); continue; }
+    seen.add(id);
+    const cat = get(catCol) || 'Uncategorized';
+    const unit = get(unitCol) || 'EA';
+    (catalog[cat] = catalog[cat] || []).push({id, name, unit});
+    const rawPrice = get(priceCol).replace(/[^0-9.\-]/g,'');
     const price = parseFloat(rawPrice);
-    if(isNaN(price)) continue;
-    const id = parseInt((row[idCol]||'').trim(), 10);
-    if(!id || !ITEM_BY_ID[id]) continue;
-    updated[id] = price;
+    if(rawPrice !== '' && !isNaN(price)) prices[id] = price;
   }
-  LIVE_PRICES = updated;
+  const count = seen.size;
+  // Safety net: a half-deleted or broken sheet should not wipe out the shop's item list.
+  const prevCount = Object.keys(ITEM_BY_ID).length;
+  if(count === 0 || count < prevCount * 0.5){
+    throw new Error(`Sheet only has ${count} valid items (app currently has ${prevCount}) — not applied. Check the sheet.`);
+  }
+  CATALOG = catalog;
+  LIVE_PRICES = prices;
+  SHEET_FETCHED_AT = Date.now();
+  SHEET_WARNINGS = warnings;
+  indexCatalogById();
   saveCachedPrices();
-  return Object.keys(updated).length;
+  return count;
+}
+
+function fmtUpdated(ts){
+  if(!ts) return 'never';
+  const d = new Date(ts);
+  return d.toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+}
+function updateSheetStamp(state){
+  const el = document.getElementById('sheetStamp');
+  if(!el) return;
+  const n = Object.keys(ITEM_BY_ID).length;
+  if(state === 'err'){
+    el.textContent = SHEET_FETCHED_AT ? `⚠ Sheet unreachable — showing prices from ${fmtUpdated(SHEET_FETCHED_AT)} (${n} items)` : `⚠ Sheet unreachable — showing built-in prices (${n} items)`;
+  } else {
+    el.textContent = SHEET_FETCHED_AT ? `Prices last updated: ${fmtUpdated(SHEET_FETCHED_AT)} · ${n} items` : `Using built-in prices · ${n} items`;
+  }
+  el.className = 'sheet-stamp' + (state === 'err' ? ' err' : '');
 }
 
 async function refreshLivePrices(){
@@ -2492,11 +2550,19 @@ async function refreshLivePrices(){
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     const count = applyCSVPrices(text);
-    if(statusEl){ statusEl.textContent = `Loaded ${count} prices from the sheet (just now).`; statusEl.className = 'settings-status ok'; }
+    if(statusEl){
+      const w = SHEET_WARNINGS.length ? ` ${SHEET_WARNINGS.length} row(s) skipped: ` + SHEET_WARNINGS.slice(0,3).join('; ') + (SHEET_WARNINGS.length>3?'…':'') : '';
+      statusEl.textContent = `Loaded ${count} items from the sheet (just now).` + w;
+      statusEl.className = 'settings-status ' + (w ? 'pending' : 'ok');
+    }
+    if(activeCategory !== 'All' && !(activeCategory in CATALOG)) activeCategory = 'All';
+    buildChips();
     renderItems();
+    updateSheetStamp('ok');
     return true;
   } catch(e){
-    if(statusEl){ statusEl.textContent = 'Could not reach the sheet — using the last cached prices.'; statusEl.className = 'settings-status err'; }
+    if(statusEl){ statusEl.textContent = (e && /valid items|headers|empty/.test(e.message) ? e.message : 'Could not reach the sheet') + ' — using the last saved prices.'; statusEl.className = 'settings-status err'; }
+    updateSheetStamp('err');
     return false;
   }
 }
@@ -2506,6 +2572,7 @@ function getPrice(id){
   const p = PRICES[id];
   return (typeof p === 'number') ? p : null;
 }
+function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function fmtMoney(n){ return '$' + n.toFixed(2); }
 
 // ---- Pick history logging (Supabase) ----
@@ -2693,7 +2760,7 @@ const searchInput = document.getElementById('searchInput');
 
 function buildChips(){
   const cats = ["All", ...Object.keys(CATALOG)];
-  chipRow.innerHTML = cats.map(c => `<button class="chip ${c===activeCategory?'active':''}" data-cat="${c}">${c}</button>`).join('');
+  chipRow.innerHTML = cats.map(c => `<button class="chip ${c===activeCategory?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   chipRow.querySelectorAll('.chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       activeCategory = chip.dataset.cat;
@@ -2715,7 +2782,7 @@ function renderItems(){
   catsToShow.forEach(cat=>{
     const items = CATALOG[cat].filter(item=> !q || item.name.toLowerCase().includes(q));
     if(items.length === 0) return;
-    html += `<div class="cat-block"><div class="cat-title">${cat}</div><div class="item-grid">`;
+    html += `<div class="cat-block"><div class="cat-title">${esc(cat)}</div><div class="item-grid">`;
     items.forEach(item=>{
       const { id, name, unit } = item;
       const inCart = findCartQty(id);
@@ -2723,8 +2790,8 @@ function renderItems(){
       html += `
         <div class="item-card">
           <div>
-            <div class="iname">${name}</div>
-            <div class="iunit">#${id} · ${unit}${price!==null ? ` · <span class="price-tag">${fmtMoney(price)}</span>` : ''}</div>
+            <div class="iname">${esc(name)}</div>
+            <div class="iunit">#${id} · ${esc(unit)}${price!==null ? ` · <span class="price-tag">${fmtMoney(price)}</span>` : ''}</div>
           </div>
           <div class="card-row">
             <span class="in-cart-tag" style="visibility:${inCart ? 'visible' : 'hidden'}">${inCart} in cart</span>
@@ -2800,8 +2867,8 @@ function renderCartModal(){
     return `
     <li class="cart-row">
       <div class="info">
-        <div class="iname">${c.name}</div>
-        <div class="imeta">${c.category} · ${c.unit}${priceStr}</div>
+        <div class="iname">${esc(c.name)}</div>
+        <div class="imeta">${esc(c.category)} · ${esc(c.unit)}${priceStr}</div>
       </div>
       <div class="stepper-sm">
         <button type="button" data-act="dec" data-idx="${i}">−</button>
@@ -2881,7 +2948,7 @@ document.getElementById('generateReportBtn').addEventListener('click', ()=>{
     const totalCell = priced ? `<td>${fmtMoney(c.price*c.qty)}</td>` : `<td class="blank">_______</td>`;
     return catRow + `
       <tr>
-        <td>${c.name}</td>
+        <td>${esc(c.name)}</td>
         <td>${c.qty}</td>
         <td>${c.unit}</td>
         ${priceCell}
@@ -2960,8 +3027,7 @@ const settingsOverlay = document.getElementById('settingsOverlay');
 document.getElementById('settingsBtn').addEventListener('click', ()=>{
   document.getElementById('sheetUrlInput').value = getSheetUrl();
   const statusEl = document.getElementById('settingsStatus');
-  const cachedCount = Object.keys(LIVE_PRICES).length;
-  statusEl.textContent = cachedCount ? `Currently using ${cachedCount} live prices from the sheet.` : 'No live prices loaded yet — using prices built into the app.';
+  statusEl.textContent = SHEET_FETCHED_AT ? `Currently using ${Object.keys(ITEM_BY_ID).length} items from the sheet, last updated ${fmtUpdated(SHEET_FETCHED_AT)}.` : 'Nothing loaded from the sheet yet — using items built into the app.';
   statusEl.className = 'settings-status pending';
   settingsOverlay.classList.add('open');
 });
@@ -3043,6 +3109,7 @@ loadStaffSession();
 buildChips();
 renderItems();
 renderCartModal();
+updateSheetStamp('ok');
 refreshLivePrices();
 </script>
 </body>
