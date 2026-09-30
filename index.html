@@ -2749,7 +2749,7 @@ function renderHistoryResults(rows){
   lastHistoryRows = rows;
   el.innerHTML = rows.map((r,i)=>{
     const d = new Date(r.created_at);
-    const itemCount = (r.items || []).length;
+    const itemCount = normalizeItems(r.items).length;
     return `
       <div class="cart-row history-row" data-hidx="${i}" style="align-items:flex-start;cursor:pointer;" title="Open this report">
         <div class="info">
@@ -2764,8 +2764,13 @@ function renderHistoryResults(rows){
     row.addEventListener('click', ()=>{
       const r = lastHistoryRows[+row.dataset.hidx];
       if(!r) return;
-      document.getElementById('historyOverlay').classList.remove('open');
-      showReport({...r, report_name: r.report_name || `${(r.job_number||'').toUpperCase().replace(/\s+/g,'-')}-${r.direction}`}, {saved: r.created_at});
+      try {
+        document.getElementById('historyOverlay').classList.remove('open');
+        showReport({...r, report_name: r.report_name || `${(r.job_number||'').toUpperCase().replace(/\s+/g,'-')}-${r.direction}`}, {saved: r.created_at});
+      } catch(e){
+        console.error('Could not open saved report', e, r);
+        alert('Could not open this report.\n\nPlease send this to Eliazar:\n' + (e && e.message ? e.message : e));
+      }
     });
   });
 }
@@ -2943,8 +2948,21 @@ document.querySelectorAll('#dopGroup .toggle-opt').forEach(btn=>{
 });
 
 // Draws a report from a record (a fresh pick, or one reopened from history) and shows it.
+function normalizeItems(items){
+  if(typeof items === 'string'){ try { items = JSON.parse(items); } catch(e){ items = []; } }
+  if(!Array.isArray(items)) items = [];
+  return items.map(it=>({
+    ...it,
+    name: it.name || '(unnamed item)',
+    unit: it.unit || '',
+    category: it.category || '',
+    qty: Number(it.qty) || 0,
+    price: (it.price === null || it.price === undefined || it.price === '' || isNaN(Number(it.price))) ? null : Number(it.price)
+  }));
+}
 function showReport(rec, opts){
   opts = opts || {};
+  rec = {...rec, items: normalizeItems(rec.items)};
   currentReportName = rec.report_name || '';
   const savedNote = opts.saved ? `<div class="report-name" style="font-weight:400">Reopened from history · saved ${new Date(opts.saved).toLocaleString()}</div>` : '';
   let currentCat = '';
