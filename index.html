@@ -210,6 +210,7 @@
   .direction-badge{ display:inline-block; font-size:15px; font-weight:800; padding:8px 18px; border-radius:8px; color:#fff; }
   .direction-badge.out{ background:var(--red); }
   .direction-badge.in{ background:#2e7d32; }
+  .history-row:hover{ background:#f6f1e9; }
   .report-name{ font-size:12px; font-weight:700; color:var(--gray); margin-top:6px; letter-spacing:.3px; }
 
   .meta-fields{ display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; margin-bottom:16px; }
@@ -2745,11 +2746,12 @@ function renderHistoryResults(rows){
     el.innerHTML = `<div class="empty-cart">No matching reports.</div>`;
     return;
   }
-  el.innerHTML = rows.map(r=>{
+  lastHistoryRows = rows;
+  el.innerHTML = rows.map((r,i)=>{
     const d = new Date(r.created_at);
     const itemCount = (r.items || []).length;
     return `
-      <div class="cart-row" style="align-items:flex-start;">
+      <div class="cart-row history-row" data-hidx="${i}" style="align-items:flex-start;cursor:pointer;" title="Open this report">
         <div class="info">
           <div class="iname">${esc(r.report_name || ((r.job_number||'—') + '-' + (r.direction||'')))}</div>
           <div class="imeta">${esc(r.job_name || '—')}</div>
@@ -2758,7 +2760,16 @@ function renderHistoryResults(rows){
         <span class="in-cart-tag" style="background:${r.direction==='OUT' ? 'var(--red)' : '#2e7d32'};">${r.direction}</span>
       </div>`;
   }).join('');
+  el.querySelectorAll('.history-row').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      const r = lastHistoryRows[+row.dataset.hidx];
+      if(!r) return;
+      document.getElementById('historyOverlay').classList.remove('open');
+      showReport({...r, report_name: r.report_name || `${(r.job_number||'').toUpperCase().replace(/\s+/g,'-')}-${r.direction}`}, {saved: r.created_at});
+    });
+  });
 }
+let lastHistoryRows = [];
 
 let direction = "OUT";
 let cart = [];
@@ -2931,31 +2942,19 @@ document.querySelectorAll('#dopGroup .toggle-opt').forEach(btn=>{
   });
 });
 
-document.getElementById('generateReportBtn').addEventListener('click', ()=>{
-  if(cart.length === 0){ alert('Add at least one item before generating a report.'); return; }
-  const jobNumRaw = document.getElementById('jobNumber').value.trim();
-  if(!jobNumRaw){ alert('Enter the Job # before generating a report. It is used to name and look up the report.'); document.getElementById('jobNumber').focus(); return; }
-  const reportName = `${jobNumRaw.toUpperCase().replace(/\s+/g,'-')}-${direction}`;
-  currentReportName = reportName;
-
-  const jobName = document.getElementById('jobName').value || '—';
-  const jobNumber = document.getElementById('jobNumber').value || '—';
-  const poNumber = document.getElementById('poNumber').value || '—';
-  const reportDate = document.getElementById('reportDate').value || '—';
-  const personName = document.getElementById('personName').value || '—';
-  const crewSize = document.getElementById('crewSize').value || '—';
-  const scopeSelected = Array.from(document.querySelectorAll('#scopeGroup .toggle-opt.selected')).map(b=>b.dataset.scope).join(', ') || '—';
-  const riskSelected = risk || '—';
-  const dopSelected = dop || '—';
-
+// Draws a report from a record (a fresh pick, or one reopened from history) and shows it.
+function showReport(rec, opts){
+  opts = opts || {};
+  currentReportName = rec.report_name || '';
+  const savedNote = opts.saved ? `<div class="report-name" style="font-weight:400">Reopened from history · saved ${new Date(opts.saved).toLocaleString()}</div>` : '';
   let currentCat = '';
   let grandTotal = 0;
   let hasUnpriced = false;
-  const rows = cart.map(c=>{
+  const rows = (rec.items||[]).map(c=>{
     let catRow = '';
     if(c.category !== currentCat){
       currentCat = c.category;
-      catRow = `<tr><td colspan="5" class="cat-td">${currentCat}</td></tr>`;
+      catRow = `<tr><td colspan="5" class="cat-td">${esc(currentCat)}</td></tr>`;
     }
     const priced = (c.price!==null && c.price!==undefined);
     if(priced){ grandTotal += c.price * c.qty; } else { hasUnpriced = true; }
@@ -2965,7 +2964,7 @@ document.getElementById('generateReportBtn').addEventListener('click', ()=>{
       <tr>
         <td>${esc(c.name)}</td>
         <td>${c.qty}</td>
-        <td>${c.unit}</td>
+        <td>${esc(c.unit)}</td>
         ${priceCell}
         ${totalCell}
       </tr>`;
@@ -2983,18 +2982,18 @@ document.getElementById('generateReportBtn').addEventListener('click', ()=>{
         <div class="co">Salco Group Construction Ltd.</div>
         <h1>Shop Pick Sheet</h1>
       </div>
-      <div style="text-align:right"><div class="direction-badge ${direction==='OUT'?'out':'in'}">${direction}</div><div class="report-name">${esc(reportName)}</div></div>
+      <div style="text-align:right"><div class="direction-badge ${rec.direction==='OUT'?'out':'in'}">${esc(rec.direction)}</div><div class="report-name">${esc(rec.report_name)}${savedNote}</div></div>
     </div>
     <div class="meta-fields">
-      <div class="meta-field"><label>Job Name</label><div class="val">${jobName}</div></div>
-      <div class="meta-field"><label>Job #</label><div class="val">${jobNumber}</div></div>
-      <div class="meta-field"><label>PO #</label><div class="val">${poNumber}</div></div>
-      <div class="meta-field"><label>Date</label><div class="val">${reportDate}</div></div>
-      <div class="meta-field"><label>Person Taking/Returning Materials</label><div class="val">${personName}</div></div>
-      <div class="meta-field"><label>Crew Size</label><div class="val">${crewSize}</div></div>
-      <div class="meta-field"><label>Scope</label><div class="val">${scopeSelected}</div></div>
-      <div class="meta-field"><label>Risk Level</label><div class="val">${riskSelected}</div></div>
-      <div class="meta-field"><label>DOP</label><div class="val">${dopSelected}</div></div>
+      <div class="meta-field"><label>Job Name</label><div class="val">${esc(rec.job_name)}</div></div>
+      <div class="meta-field"><label>Job #</label><div class="val">${esc(rec.job_number)}</div></div>
+      <div class="meta-field"><label>PO #</label><div class="val">${esc(rec.po_number)}</div></div>
+      <div class="meta-field"><label>Date</label><div class="val">${esc(rec.report_date)}</div></div>
+      <div class="meta-field"><label>Person Taking/Returning Materials</label><div class="val">${esc(rec.person_name)}</div></div>
+      <div class="meta-field"><label>Crew Size</label><div class="val">${esc(rec.crew_size)}</div></div>
+      <div class="meta-field"><label>Scope</label><div class="val">${esc(rec.scope)}</div></div>
+      <div class="meta-field"><label>Risk Level</label><div class="val">${esc(rec.risk)}</div></div>
+      <div class="meta-field"><label>DOP</label><div class="val">${esc(rec.dop)}</div></div>
     </div>
     <table class="report-table">
       <thead>
@@ -3012,22 +3011,30 @@ document.getElementById('generateReportBtn').addEventListener('click', ()=>{
   document.querySelector('.search-bar').style.display = 'none';
   document.querySelector('.workspace').style.display = 'none';
   document.getElementById('reportView').classList.add('open');
+  window.scrollTo(0,0);
+  return grandTotal;
+}
 
-  savePickHistory({
-    report_name: reportName,
+document.getElementById('generateReportBtn').addEventListener('click', ()=>{
+  if(cart.length === 0){ alert('Add at least one item before generating a report.'); return; }
+  const jobNumRaw = document.getElementById('jobNumber').value.trim();
+  if(!jobNumRaw){ alert('Enter the Job # before generating a report. It is used to name and look up the report.'); document.getElementById('jobNumber').focus(); return; }
+  const rec = {
+    report_name: `${jobNumRaw.toUpperCase().replace(/\s+/g,'-')}-${direction}`,
     direction,
-    job_name: jobName,
-    job_number: jobNumber,
-    po_number: poNumber,
-    report_date: reportDate,
-    person_name: personName,
-    crew_size: crewSize,
-    scope: scopeSelected,
-    risk: riskSelected,
-    dop: dopSelected,
-    items: cart.map(c=>({id:c.id, name:c.name, unit:c.unit, category:c.category, qty:c.qty, price:c.price})),
-    total: grandTotal
-  });
+    job_name: document.getElementById('jobName').value || '—',
+    job_number: jobNumRaw,
+    po_number: document.getElementById('poNumber').value || '—',
+    report_date: document.getElementById('reportDate').value || '—',
+    person_name: document.getElementById('personName').value || '—',
+    crew_size: document.getElementById('crewSize').value || '—',
+    scope: Array.from(document.querySelectorAll('#scopeGroup .toggle-opt.selected')).map(b=>b.dataset.scope).join(', ') || '—',
+    risk: risk || '—',
+    dop: dop || '—',
+    items: cart.map(c=>({id:c.id, name:c.name, unit:c.unit, category:c.category, qty:c.qty, price:c.price}))
+  };
+  rec.total = showReport(rec);
+  savePickHistory(rec);
 });
 
 document.getElementById('backToCartBtn').addEventListener('click', ()=>{
