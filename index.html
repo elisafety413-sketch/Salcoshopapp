@@ -211,6 +211,30 @@
   .direction-badge.out{ background:var(--red); }
   .direction-badge.in{ background:#2e7d32; }
   .history-row:hover{ background:#f6f1e9; }
+  .hist-toggle{ display:flex; border:1.5px solid var(--line); border-radius:9px; overflow:hidden; background:#fff; margin:8px 0 2px; }
+  .hist-toggle button{ flex:1; border:none; background:none; padding:11px 10px; font-family:inherit; font-weight:700; font-size:14px; cursor:pointer; color:var(--ink); }
+  .hist-toggle button + button{ border-left:1.5px solid var(--line); }
+  .hist-toggle button.selected{ background:var(--red); color:#fff; }
+  .hist-dir{ display:inline-block; min-width:44px; text-align:center; padding:4px 9px; border-radius:6px; color:#fff; font-size:12px; font-weight:800; letter-spacing:.4px; flex-shrink:0; }
+  .hist-dir.out{ background:var(--red); }
+  .hist-dir.in{ background:#2e7d32; }
+  .hist-summary{ font-size:12.5px; color:var(--gray); margin:2px 0 8px; min-height:16px; }
+  .job-group{ border:1.5px solid var(--line); border-radius:10px; background:#fff; margin-bottom:10px; overflow:hidden; }
+  .job-group > summary{ list-style:none; cursor:pointer; display:flex; gap:12px; align-items:center; padding:12px 14px; }
+  .job-group > summary::-webkit-details-marker{ display:none; }
+  .job-group > summary::before{ content:'\25B8'; color:var(--steel); font-size:15px; width:12px; flex-shrink:0; }
+  .job-group[open] > summary::before{ content:'\25BE'; }
+  .job-group[open] > summary{ border-bottom:1.5px solid var(--line); background:#f6f1e9; }
+  .job-group > summary:hover{ background:#f6f1e9; }
+  .job-head-info{ flex:1; min-width:0; }
+  .job-num{ font-weight:800; font-size:16px; color:var(--ink); overflow-wrap:anywhere; }
+  .job-meta{ color:var(--gray); font-size:12.5px; }
+  .job-total{ text-align:right; white-space:nowrap; flex-shrink:0; }
+  .job-total .lbl{ font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--steel); font-weight:700; }
+  .job-total .amt{ font-weight:800; font-size:18px; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .job-reports{ padding:0 14px; }
+  .job-breakdown{ display:flex; flex-wrap:wrap; gap:6px 22px; justify-content:flex-end; padding:11px 14px; background:#eee7d6; font-size:13px; color:var(--steel); font-variant-numeric:tabular-nums; }
+  .job-breakdown strong{ color:var(--ink); }
   .report-name{ font-size:12px; font-weight:700; color:var(--gray); margin-top:6px; letter-spacing:.3px; }
 
   .meta-fields{ display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; margin-bottom:16px; }
@@ -373,6 +397,11 @@
           <button type="button" class="clear-cart-btn" id="historyLogoutBtn">Log Out</button>
         </div>
         <input type="text" id="historySearchInput" placeholder="Search by job name or job #…" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;margin:10px 0;background:#fff;color:var(--ink);">
+        <div class="hist-toggle" id="historyViewToggle">
+          <button type="button" class="selected" data-hview="latest">Latest Reports</button>
+          <button type="button" data-hview="job">By Job</button>
+        </div>
+        <div class="hist-summary" id="historySummary"></div>
         <div id="historyResults"></div>
         <div class="modal-actions">
           <button class="btn-secondary" id="historyCloseBtn" type="button">Close</button>
@@ -2670,21 +2699,42 @@ async function staffRefreshSession(){
   } catch(e){ return false; }
 }
 
-async function fetchPickHistory(searchTerm){
+// Latest view pulls the 100 most recent reports. By Job view needs every report so
+// job totals are complete, so it pages through the whole table (all=true).
+const HISTORY_LATEST_LIMIT = 100;
+const HISTORY_PAGE_SIZE = 1000;
+const HISTORY_MAX_ROWS = 10000;
+let historyTruncated = false;
+
+async function fetchPickHistory(searchTerm, all){
   if(!isLoggedIn()){
     const refreshed = await staffRefreshSession();
     if(!refreshed) return null; // signals "not logged in" to the caller
   }
-  let url = `${SUPABASE_URL}/rest/v1/pick_history?select=*&order=created_at.desc&limit=100`;
+  let base = `${SUPABASE_URL}/rest/v1/pick_history?select=*&order=created_at.desc`;
   if(searchTerm){
     const term = encodeURIComponent(`%${searchTerm}%`);
-    url += `&or=(job_name.ilike.${term},job_number.ilike.${term})`;
+    base += `&or=(job_name.ilike.${term},job_number.ilike.${term})`;
   }
-  const res = await fetch(url, {
-    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${staffSession.access_token}` }
-  });
-  if(!res.ok) return null;
-  return await res.json();
+  const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${staffSession.access_token}` };
+  if(!all){
+    const res = await fetch(`${base}&limit=${HISTORY_LATEST_LIMIT}`, { headers });
+    if(!res.ok) return null;
+    return await res.json();
+  }
+  // Keep asking for the next page until one comes back empty (the server may cap
+  // a page below what we asked for, so a short page doesn't mean we're done).
+  const rows = [];
+  historyTruncated = false;
+  while(rows.length < HISTORY_MAX_ROWS){
+    const res = await fetch(`${base}&limit=${HISTORY_PAGE_SIZE}&offset=${rows.length}`, { headers });
+    if(!res.ok) return rows.length ? rows : null;
+    const page = await res.json();
+    if(!Array.isArray(page) || page.length === 0) return rows;
+    rows.push(...page);
+  }
+  historyTruncated = true;
+  return rows;
 }
 
 // Finds the most recent OUT report for a given job number and pre-fills the
@@ -2740,41 +2790,181 @@ async function pullLastOut(jobNumber){
   }
 }
 
+// ---- History list rendering: "Latest Reports" (flat, newest first) or "By Job" ----
+let lastHistoryRows = [];
+let historyView = 'latest';   // 'latest' | 'job'
+let historyTerm = '';
+let historyLoadSeq = 0;
+let historyAllRows = null;    // full history for By Job, loaded once each time History is opened
+
+function fmtSignedMoney(n){ return (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2); }
+
+// Dollar value of one saved report: the total stored with it, or (older rows
+// saved without one) recalculated from its priced items.
+function reportTotal(r){
+  if(r.total !== null && r.total !== undefined && r.total !== '' && !isNaN(Number(r.total))) return Number(r.total);
+  return normalizeItems(r.items).reduce((s,it)=> s + (it.price !== null ? it.price * it.qty : 0), 0);
+}
+function reportUnpricedCount(r){
+  return normalizeItems(r.items).filter(it=> it.price === null).length;
+}
+// Same normalisation used for report names, so "sgd 26 298" and "SGD-26-298" are one job.
+function jobKeyOf(r){
+  return String(r.job_number || '').trim().toUpperCase().replace(/\s+/g,'-');
+}
+function historyReportName(r){
+  return r.report_name || `${jobKeyOf(r) || '—'}-${r.direction || ''}`;
+}
+
+// rows arrive newest first, so the first time a job shows up is its latest activity
+// and the groups come out ordered by most recently active job.
+function groupHistoryByJob(rows){
+  const groups = new Map();
+  rows.forEach((r,i)=>{
+    const key = jobKeyOf(r);
+    let g = groups.get(key);
+    if(!g){
+      g = { key, name:'', reports:[], outTotal:0, inTotal:0, outCount:0, inCount:0, unpriced:0, lastAt:r.created_at };
+      groups.set(key, g);
+    }
+    if(!g.name && r.job_name && r.job_name !== '—') g.name = r.job_name;
+    const t = reportTotal(r);
+    if(r.direction === 'IN'){ g.inTotal += t; g.inCount++; }
+    else { g.outTotal += t; g.outCount++; }
+    g.unpriced += reportUnpricedCount(r);
+    g.reports.push({ r, idx:i });
+  });
+  return Array.from(groups.values());
+}
+
+function historyRowHtml(r, idx, showJobName){
+  const d = new Date(r.created_at);
+  const itemCount = normalizeItems(r.items).length;
+  return `
+    <div class="cart-row history-row" data-hidx="${idx}" style="align-items:flex-start;cursor:pointer;" title="Open this report">
+      <div class="info">
+        <div class="iname">${esc(historyReportName(r))}</div>
+        ${showJobName ? `<div class="imeta">${esc(r.job_name || '—')}</div>` : ''}
+        <div class="imeta">${d.toLocaleDateString()} · ${itemCount} item${itemCount===1?'':'s'} · ${fmtMoney(reportTotal(r))}</div>
+      </div>
+      <span class="hist-dir ${r.direction==='OUT' ? 'out' : 'in'}">${esc(r.direction)}</span>
+    </div>`;
+}
+
 function renderHistoryResults(rows){
   const el = document.getElementById('historyResults');
-  if(!rows || rows.length === 0){
+  const sumEl = document.getElementById('historySummary');
+  rows = rows || [];
+  lastHistoryRows = rows;
+  if(rows.length === 0){
+    sumEl.textContent = '';
     el.innerHTML = `<div class="empty-cart">No matching reports.</div>`;
     return;
   }
-  lastHistoryRows = rows;
-  el.innerHTML = rows.map((r,i)=>{
-    const d = new Date(r.created_at);
-    const itemCount = normalizeItems(r.items).length;
-    return `
-      <div class="cart-row history-row" data-hidx="${i}" style="align-items:flex-start;cursor:pointer;" title="Open this report">
-        <div class="info">
-          <div class="iname">${esc(r.report_name || ((r.job_number||'—') + '-' + (r.direction||'')))}</div>
-          <div class="imeta">${esc(r.job_name || '—')}</div>
-          <div class="imeta">${d.toLocaleDateString()} · ${itemCount} item${itemCount===1?'':'s'} · ${r.total!=null ? fmtMoney(Number(r.total)) : '—'}</div>
-        </div>
-        <span class="in-cart-tag" style="background:${r.direction==='OUT' ? 'var(--red)' : '#2e7d32'};">${r.direction}</span>
+
+  if(historyView !== 'job'){
+    sumEl.textContent = rows.length >= HISTORY_LATEST_LIMIT
+      ? `Showing the ${HISTORY_LATEST_LIMIT} most recent reports — search to find older ones.`
+      : `${rows.length} report${rows.length===1?'':'s'}, newest first.`;
+    el.innerHTML = rows.map((r,i)=> historyRowHtml(r, i, true)).join('');
+    return;
+  }
+
+  // By Job always groups the full history and filters whole jobs, so a search can
+  // never show a job with some of its reports (and part of its cost) missing.
+  let groups = groupHistoryByJob(rows);
+  if(historyTerm){
+    const t = historyTerm.toLowerCase();
+    const tKey = historyTerm.trim().toUpperCase().replace(/\s+/g,'-');
+    groups = groups.filter(g=> g.key.includes(tKey) || g.reports.some(x=>
+      String(x.r.job_name || '').toLowerCase().includes(t) || String(x.r.job_number || '').toLowerCase().includes(t)));
+  }
+  if(groups.length === 0){
+    sumEl.textContent = '';
+    el.innerHTML = `<div class="empty-cart">No matching jobs.</div>`;
+    return;
+  }
+  const shownReports = groups.reduce((n,g)=> n + g.reports.length, 0);
+  const openAll = !!historyTerm || groups.length === 1;
+  sumEl.textContent = `${groups.length} job${groups.length===1?'':'s'} · ${shownReports} report${shownReports===1?'':'s'} · most recently active first`
+    + (historyTruncated ? ` · only the newest ${HISTORY_MAX_ROWS} reports are included` : '');
+  el.innerHTML = groups.map(g=>{
+    const net = g.outTotal - g.inTotal;
+    const n = g.reports.length;
+    const counts = [g.outCount ? `${g.outCount} OUT` : '', g.inCount ? `${g.inCount} IN` : ''].filter(Boolean).join(', ');
+    const breakdown = `
+      <div class="job-breakdown">
+        <span>Out: <strong>${fmtMoney(g.outTotal)}</strong></span>
+        ${g.inCount ? `<span>Returned: <strong>-${fmtMoney(g.inTotal)}</strong></span>` : ''}
+        <span>Job cost: <strong>${fmtSignedMoney(net)}</strong></span>
+        ${g.unpriced ? `<span title="Lines saved with no price are not in the totals">${g.unpriced} unpriced line${g.unpriced===1?'':'s'} not included</span>` : ''}
       </div>`;
+    return `
+      <details class="job-group"${openAll ? ' open' : ''}>
+        <summary>
+          <div class="job-head-info">
+            <div class="job-num">${esc(g.key || 'No Job #')}</div>
+            ${g.name ? `<div class="job-meta">${esc(g.name)}</div>` : ''}
+            <div class="job-meta">${n} report${n===1?'':'s'} (${counts}) · last ${new Date(g.lastAt).toLocaleDateString()}</div>
+          </div>
+          <div class="job-total">
+            <div class="lbl">Job cost</div>
+            <div class="amt">${fmtSignedMoney(net)}</div>
+          </div>
+        </summary>
+        <div class="job-reports">${g.reports.map(x=> historyRowHtml(x.r, x.idx, false)).join('')}</div>
+        ${breakdown}
+      </details>`;
   }).join('');
-  el.querySelectorAll('.history-row').forEach(row=>{
-    row.addEventListener('click', ()=>{
-      const r = lastHistoryRows[+row.dataset.hidx];
-      if(!r) return;
-      try {
-        document.getElementById('historyOverlay').classList.remove('open');
-        showReport({...r, report_name: r.report_name || `${(r.job_number||'').toUpperCase().replace(/\s+/g,'-')}-${r.direction}`}, {saved: r.created_at});
-      } catch(e){
-        console.error('Could not open saved report', e, r);
-        alert('Could not open this report.\n\nPlease send this to Eliazar:\n' + (e && e.message ? e.message : e));
-      }
-    });
-  });
 }
-let lastHistoryRows = [];
+
+// Fetches for the current view + search term and draws the result. The sequence
+// number stops a slow earlier request from overwriting a newer one.
+async function loadHistory(){
+  const seq = ++historyLoadSeq;
+  const el = document.getElementById('historyResults');
+  if(historyView === 'job' && historyAllRows){
+    renderHistoryResults(historyAllRows);   // searching By Job just re-filters what's loaded
+    return;
+  }
+  document.getElementById('historySummary').textContent = '';
+  el.innerHTML = `<div class="empty-cart">Loading…</div>`;
+  let rows = null;
+  try {
+    rows = historyView === 'job' ? await fetchPickHistory('', true) : await fetchPickHistory(historyTerm, false);
+  } catch(e){ console.error('history load error', e); }
+  if(seq !== historyLoadSeq) return;
+  if(historyView === 'job' && rows !== null) historyAllRows = rows;
+  if(rows === null){
+    el.innerHTML = `<div class="empty-cart">Could not load history — check the connection, or log out and back in.</div>`;
+    return;
+  }
+  renderHistoryResults(rows);
+}
+
+// One click handler for every report row in either view.
+document.getElementById('historyResults').addEventListener('click', (e)=>{
+  const row = e.target.closest('.history-row');
+  if(!row) return;
+  const r = lastHistoryRows[+row.dataset.hidx];
+  if(!r) return;
+  try {
+    document.getElementById('historyOverlay').classList.remove('open');
+    showReport({...r, report_name: historyReportName(r)}, {saved: r.created_at});
+  } catch(err){
+    console.error('Could not open saved report', err, r);
+    alert('Could not open this report.\n\nPlease send this to Eliazar:\n' + (err && err.message ? err.message : err));
+  }
+});
+
+document.querySelectorAll('#historyViewToggle button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if(historyView === btn.dataset.hview) return;
+    historyView = btn.dataset.hview;
+    document.querySelectorAll('#historyViewToggle button').forEach(b=> b.classList.toggle('selected', b === btn));
+    loadHistory();
+  });
+});
 
 let direction = "OUT";
 let cart = [];
@@ -3099,7 +3289,12 @@ function showHistoryList(){
   historyLoginView.style.display = 'none';
   historyListView.style.display = 'block';
   document.getElementById('historySearchInput').value = '';
-  fetchPickHistory('').then(rows=> renderHistoryResults(rows || []));
+  historyTerm = '';
+  // Always open on the latest-first list; By Job is one tap away.
+  historyView = 'latest';
+  historyAllRows = null;
+  document.querySelectorAll('#historyViewToggle button').forEach(b=> b.classList.toggle('selected', b.dataset.hview === 'latest'));
+  loadHistory();
 }
 
 document.getElementById('historyBtn').addEventListener('click', async ()=>{
@@ -3146,7 +3341,8 @@ document.getElementById('historySearchInput').addEventListener('input', (e)=>{
   clearTimeout(historySearchDebounce);
   const term = e.target.value.trim();
   historySearchDebounce = setTimeout(()=>{
-    fetchPickHistory(term).then(rows=> renderHistoryResults(rows || []));
+    historyTerm = term;
+    loadHistory();
   }, 300);
 });
 
