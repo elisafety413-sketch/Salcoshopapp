@@ -211,6 +211,32 @@
   .direction-badge.out{ background:var(--red); }
   .direction-badge.in{ background:#2e7d32; }
   .history-row:hover{ background:#f6f1e9; }
+
+  /* ---- Login screen: covers the whole app until someone signs in ---- */
+  body.locked .app{ display:none; }
+  .login-gate{
+    display:none; position:fixed; inset:0; z-index:100; overflow-y:auto; padding:20px;
+    align-items:center; justify-content:center;
+    background:linear-gradient(155deg, var(--red) 0%, var(--red-deep) 130%);
+  }
+  body.locked .login-gate{ display:flex; }
+  .login-card{ background:var(--paper); width:100%; max-width:400px; border-radius:14px; overflow:hidden; box-shadow:0 18px 50px rgba(0,0,0,.35); }
+  .login-body{ padding:24px 26px 26px; }
+  .login-brand{ font-size:11px; letter-spacing:2px; font-weight:700; color:var(--gray); text-transform:uppercase; }
+  .login-card h1{ margin:3px 0 6px; font-size:24px; font-weight:800; color:var(--ink); }
+  .login-card input{
+    font-family:inherit; font-size:16px; padding:11px 12px; border:1.5px solid var(--line);
+    border-radius:9px; width:100%; background:#fff; color:var(--ink);
+  }
+  .login-card .btn-primary{ width:100%; margin-top:6px; }
+  .login-card .btn-primary:disabled, #generateReportBtn:disabled{ opacity:.6; cursor:default; }
+  .logout-btn{ width:auto; padding:0 12px; font-size:12.5px; font-weight:800; letter-spacing:.3px; font-family:inherit; }
+  .report-save-status{ max-width:900px; margin:18px auto 0; padding:0 22px; font-size:13.5px; font-weight:700; min-height:20px; }
+  .report-save-status.ok{ color:#15803d; }
+  .report-save-status.err{ color:var(--red-deep); }
+  .report-save-status.pending{ color:var(--gray); }
+  .report-save-status button{ margin-left:10px; background:#fff; border:1.5px solid var(--red); color:var(--red); border-radius:7px; padding:5px 12px; font-weight:800; font-size:13px; cursor:pointer; font-family:inherit; }
+  .report-save-status + .report-actions{ margin-top:12px; }
   .hist-toggle{ display:flex; border:1.5px solid var(--line); border-radius:9px; overflow:hidden; background:#fff; margin:8px 0 2px; }
   .hist-toggle button{ flex:1; border:none; background:none; padding:11px 10px; font-family:inherit; font-weight:700; font-size:14px; cursor:pointer; color:var(--ink); }
   .hist-toggle button + button{ border-left:1.5px solid var(--line); }
@@ -258,13 +284,29 @@
 
   @media print{
     body{ background:#fff; }
-    .topbar, .search-bar, .workspace, .report-actions{ display:none !important; }
+    .topbar, .search-bar, .workspace, .report-actions, .report-save-status, .login-gate{ display:none !important; }
     #reportView{ display:block !important; }
     .app{ max-width:none; }
   }
 </style>
 </head>
-<body>
+<body class="locked">
+<div class="login-gate" id="loginGate">
+  <form class="login-card" id="loginForm">
+    <div class="hazard-edge"></div>
+    <div class="login-body">
+      <div class="login-brand">Salco Group Construction Ltd.</div>
+      <h1>Shop Pick Sheet</h1>
+      <p class="settings-help" id="loginHelp">Checking sign-in…</p>
+      <div id="loginFields" style="display:none;">
+        <div class="field"><label for="loginEmail">Email</label><input type="email" id="loginEmail" autocomplete="username" required></div>
+        <div class="field"><label for="loginPassword">Password</label><input type="password" id="loginPassword" autocomplete="current-password" required></div>
+        <div id="loginStatus" class="settings-status" role="alert"></div>
+        <button class="btn-primary" type="submit" id="loginBtn">Log In</button>
+      </div>
+    </div>
+  </form>
+</div>
 <div class="app">
 
   <header class="topbar">
@@ -279,6 +321,7 @@
       </div>
       <button type="button" id="historyBtn" class="settings-btn" title="Pick history">📋</button>
       <button type="button" id="settingsBtn" class="settings-btn" title="Price sheet settings">⚙️</button>
+      <button type="button" id="logoutBtn" class="settings-btn logout-btn" title="Log out of the pick sheet">Log Out</button>
     </div>
     <div id="sheetStamp" class="sheet-stamp"></div>
     <div class="hazard-edge"></div>
@@ -350,6 +393,7 @@
 
   <div id="reportView">
     <div class="report-sheet" id="reportSheet"></div>
+    <div class="report-save-status" id="reportSaveStatus"></div>
     <div class="report-actions">
       <button class="btn-secondary" id="backToCartBtn">← Back to Pick Sheet</button>
       <button class="btn-primary" id="printBtn">Print Report</button>
@@ -379,23 +423,8 @@
     <div class="modal">
       <div class="modal-handle"></div>
 
-      <div id="historyLoginView">
-        <h2>Staff Login</h2>
-        <p class="settings-help">Log in with the shared shop account to view pick history.</p>
-        <div class="field" style="margin-bottom:10px;"><label>Email</label><input type="text" id="historyEmail" autocomplete="username"></div>
-        <div class="field" style="margin-bottom:10px;"><label>Password</label><input type="password" id="historyPassword" autocomplete="current-password"></div>
-        <div id="historyLoginStatus" class="settings-status"></div>
-        <div class="modal-actions">
-          <button class="btn-secondary" id="historyCancelBtn" type="button">Close</button>
-          <button class="btn-primary" id="historyLoginBtn" type="button">Log In</button>
-        </div>
-      </div>
-
-      <div id="historyListView" style="display:none;">
-        <div class="cart-panel-actions">
-          <h2>Pick History</h2>
-          <button type="button" class="clear-cart-btn" id="historyLogoutBtn">Log Out</button>
-        </div>
+      <div id="historyListView">
+        <h2>Pick History</h2>
         <input type="text" id="historySearchInput" placeholder="Search by job name or job #…" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;margin:10px 0;background:#fff;color:var(--ink);">
         <div class="hist-toggle" id="historyViewToggle">
           <button type="button" class="selected" data-hview="latest">Latest Reports</button>
@@ -2609,39 +2638,55 @@ function fmtMoney(n){ return '$' + n.toFixed(2); }
 // ---- Pick history logging (Supabase) ----
 // Every generated report is saved as a row in the pick_history table via a plain
 // REST call to PostgREST (no supabase-js dependency needed for a simple insert).
-// The publishable key below is safe for public/client-side use by design — the
-// table's Row Level Security policy only allows INSERT from this key, nothing else.
+// The publishable key below is safe for public/client-side use by design — what it
+// is allowed to do is decided by the table's Row Level Security policies.
 const SUPABASE_URL = 'https://sukmjvjcyqdyompeghbj.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_BWTEiW1Ka5cZbXdBkQ5hBQ_lypujz1d';
 
+function postPick(record, token){
+  return fetch(`${SUPABASE_URL}/rest/v1/pick_history`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify(record)
+  });
+}
+
+// Saves one report. Returns true only when Supabase confirmed the row was stored.
+// It saves as the signed-in staff account first. If the table still only accepts
+// the public key (the setup before the app had a login), it falls back to that, so
+// the app works both before and after the table is restricted to signed-in staff.
 async function savePickHistory(record){
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/pick_history`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
-      },
-      body: JSON.stringify(record)
-    });
-    if(!res.ok){
-      const txt = await res.text();
+  const tokens = [];
+  if(await ensureSession() === 'ok') tokens.push(staffSession.access_token);
+  tokens.push(SUPABASE_KEY);
+  for(const token of tokens){
+    try {
+      let res = await postPick(record, token);
+      if(res.ok) return true;
+      let txt = await res.text();
       // If the report_name column hasn't been added in Supabase yet, save without it
       // so no pick is ever lost.
       if(record.report_name !== undefined && /report_name/.test(txt)){
         const {report_name, ...rest} = record;
-        return savePickHistory(rest);
+        res = await postPick(rest, token);
+        if(res.ok) return true;
+        txt = await res.text();
       }
       console.error('pick_history save failed', res.status, txt);
+    } catch(e){
+      console.error('pick_history save error', e);
+      return false;   // no connection — the other key would fail the same way
     }
-  } catch(e){
-    console.error('pick_history save error', e);
   }
+  return false;
 }
 
-// ---- Staff login (shared account) for viewing pick history ----
+// ---- Staff login: required to use the app at all ----
 // Session (access + refresh token) is cached in localStorage so staff don't have
 // to log in again every time the app is opened on the same device.
 const AUTH_SESSION_KEY = 'salcoStaffSession';
@@ -2671,8 +2716,12 @@ async function staffLogin(email, password){
     headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
   });
-  const data = await res.json();
-  if(!res.ok) throw new Error(data.error_description || data.msg || 'Login failed');
+  const data = await res.json().catch(()=> ({}));
+  if(!res.ok || !data.access_token){
+    const err = new Error(data.error_description || data.msg || 'Login failed');
+    err.badCredentials = (res.status === 400 || res.status === 401 || res.status === 403);
+    throw err;
+  }
   saveStaffSession({
     access_token: data.access_token,
     refresh_token: data.refresh_token,
@@ -2680,24 +2729,99 @@ async function staffLogin(email, password){
   });
 }
 
-async function staffRefreshSession(){
-  if(!staffSession || !staffSession.refresh_token) return false;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST',
-      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: staffSession.refresh_token })
-    });
-    const data = await res.json();
-    if(!res.ok) return false;
-    saveStaffSession({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: Date.now() + (data.expires_in * 1000)
-    });
-    return true;
-  } catch(e){ return false; }
+// Makes sure there is a usable sign-in before a request, renewing it when the
+// hour-long access token has run out. Resolves to:
+//   'ok'      — signed in, staffSession.access_token is good to use
+//   'denied'  — no sign-in, or Supabase rejected the saved one (must log in again)
+//   'offline' — a saved sign-in exists but Supabase could not be reached to renew it
+let sessionRefreshInFlight = null;
+function ensureSession(){
+  if(staffSession && staffSession.access_token && staffSession.expires_at > Date.now() + 60000) return Promise.resolve('ok');
+  if(!staffSession || !staffSession.refresh_token) return Promise.resolve('denied');
+  if(sessionRefreshInFlight) return sessionRefreshInFlight;   // one renewal at a time
+  sessionRefreshInFlight = (async ()=>{
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: staffSession.refresh_token })
+      });
+      const data = await res.json().catch(()=> ({}));
+      if(res.ok && data.access_token){
+        saveStaffSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+          expires_at: Date.now() + (data.expires_in * 1000)
+        });
+        return 'ok';
+      }
+      if(res.status === 400 || res.status === 401 || res.status === 403){
+        clearStaffSession();
+        return 'denied';
+      }
+      return isLoggedIn() ? 'ok' : 'offline';   // Supabase is having trouble, not a rejection
+    } catch(e){
+      return isLoggedIn() ? 'ok' : 'offline';
+    } finally {
+      sessionRefreshInFlight = null;
+    }
+  })();
+  return sessionRefreshInFlight;
 }
+
+// ---- Login screen ----
+function showLoginForm(message){
+  document.body.classList.add('locked');
+  document.querySelectorAll('.modal-overlay.open').forEach(o=> o.classList.remove('open'));
+  document.getElementById('loginHelp').textContent = 'Log in to use the pick sheet.';
+  document.getElementById('loginFields').style.display = 'block';
+  const statusEl = document.getElementById('loginStatus');
+  statusEl.textContent = message || '';
+  statusEl.className = 'settings-status' + (message ? ' err' : '');
+  document.getElementById('loginPassword').value = '';
+  const emailEl = document.getElementById('loginEmail');
+  (emailEl.value ? document.getElementById('loginPassword') : emailEl).focus();
+}
+function unlockApp(){
+  document.body.classList.remove('locked');
+}
+// Called when Supabase says the sign-in is no longer good. Anything already in the
+// cart stays put — the page isn't reloaded, so they carry on after logging back in.
+function sessionExpired(){
+  clearStaffSession();
+  showLoginForm('Your sign-in has expired — please log in again.');
+}
+async function initLoginGate(){
+  if(isLoggedIn()){ unlockApp(); return; }
+  if(!staffSession || !staffSession.refresh_token){ showLoginForm(); return; }
+  const state = await ensureSession();
+  // 'offline': this device has signed in before and the internet is down. Let them
+  // build and print a sheet from saved prices; nothing can be read or saved anyway.
+  if(state === 'denied') showLoginForm('Your sign-in has expired — please log in again.');
+  else unlockApp();
+}
+document.getElementById('loginForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const statusEl = document.getElementById('loginStatus');
+  statusEl.textContent = 'Logging in…'; statusEl.className = 'settings-status pending';
+  btn.disabled = true;
+  try {
+    await staffLogin(document.getElementById('loginEmail').value.trim(), document.getElementById('loginPassword').value);
+    document.getElementById('loginPassword').value = '';
+    statusEl.textContent = '';
+    unlockApp();
+  } catch(err){
+    statusEl.textContent = err.badCredentials ? 'Login failed — check the email and password.' : 'Could not reach the server — check the internet connection and try again.';
+    statusEl.className = 'settings-status err';
+  } finally {
+    btn.disabled = false;
+  }
+});
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  clearStaffSession();
+  showLoginForm();
+});
 
 // Latest view pulls the 100 most recent reports. By Job view needs every report so
 // job totals are complete, so it pages through the whole table (all=true).
@@ -2707,9 +2831,10 @@ const HISTORY_MAX_ROWS = 10000;
 let historyTruncated = false;
 
 async function fetchPickHistory(searchTerm, all){
-  if(!isLoggedIn()){
-    const refreshed = await staffRefreshSession();
-    if(!refreshed) return null; // signals "not logged in" to the caller
+  const state = await ensureSession();
+  if(state !== 'ok'){
+    if(state === 'denied') sessionExpired();
+    return null; // signals "could not load" to the caller
   }
   let base = `${SUPABASE_URL}/rest/v1/pick_history?select=*&order=created_at.desc`;
   if(searchTerm){
@@ -2719,6 +2844,7 @@ async function fetchPickHistory(searchTerm, all){
   const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${staffSession.access_token}` };
   if(!all){
     const res = await fetch(`${base}&limit=${HISTORY_LATEST_LIMIT}`, { headers });
+    if(res.status === 401){ sessionExpired(); return null; }
     if(!res.ok) return null;
     return await res.json();
   }
@@ -2728,7 +2854,8 @@ async function fetchPickHistory(searchTerm, all){
   historyTruncated = false;
   while(rows.length < HISTORY_MAX_ROWS){
     const res = await fetch(`${base}&limit=${HISTORY_PAGE_SIZE}&offset=${rows.length}`, { headers });
-    if(!res.ok) return rows.length ? rows : null;
+    if(res.status === 401){ sessionExpired(); return null; }
+    if(!res.ok) return null;   // a partial history would give wrong job totals
     const page = await res.json();
     if(!Array.isArray(page) || page.length === 0) return rows;
     rows.push(...page);
@@ -2745,18 +2872,18 @@ async function pullLastOut(jobNumber){
     statusEl.textContent = 'Enter a Job # first.'; statusEl.className = 'settings-status err';
     return;
   }
-  if(!isLoggedIn()){
-    const refreshed = await staffRefreshSession();
-    if(!refreshed){
-      statusEl.textContent = 'Log in (📋 History) to pull past jobs.'; statusEl.className = 'settings-status err';
-      return;
-    }
+  const sessionState = await ensureSession();
+  if(sessionState !== 'ok'){
+    if(sessionState === 'denied'){ statusEl.textContent = ''; sessionExpired(); }
+    else { statusEl.textContent = 'No internet connection — cannot look up past jobs right now.'; statusEl.className = 'settings-status err'; }
+    return;
   }
   statusEl.textContent = 'Looking up last OUT…'; statusEl.className = 'settings-status pending';
   try {
     const term = encodeURIComponent(jobNumber.trim());
     const url = `${SUPABASE_URL}/rest/v1/pick_history?select=*&direction=eq.OUT&job_number=eq.${term}&order=created_at.desc&limit=1`;
     const res = await fetch(url, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${staffSession.access_token}` } });
+    if(res.status === 401){ statusEl.textContent = ''; sessionExpired(); return; }
     if(!res.ok) throw new Error('lookup failed');
     const rows = await res.json();
     if(!rows.length){
@@ -2936,7 +3063,7 @@ async function loadHistory(){
   if(seq !== historyLoadSeq) return;
   if(historyView === 'job' && rows !== null) historyAllRows = rows;
   if(rows === null){
-    el.innerHTML = `<div class="empty-cart">Could not load history — check the connection, or log out and back in.</div>`;
+    el.innerHTML = `<div class="empty-cart">Could not load history — check the internet connection and try again.</div>`;
     return;
   }
   renderHistoryResults(rows);
@@ -3154,6 +3281,11 @@ function showReport(rec, opts){
   opts = opts || {};
   rec = {...rec, items: normalizeItems(rec.items)};
   currentReportName = rec.report_name || '';
+  if(opts.saved){
+    reportBeingSaved = null;
+    const saveEl = document.getElementById('reportSaveStatus');
+    saveEl.textContent = ''; saveEl.className = 'report-save-status';
+  }
   const savedNote = opts.saved ? `<div class="report-name" style="font-weight:400">Reopened from history · saved ${new Date(opts.saved).toLocaleString()}</div>` : '';
   let currentCat = '';
   let grandTotal = 0;
@@ -3223,12 +3355,71 @@ function showReport(rec, opts){
   return grandTotal;
 }
 
-document.getElementById('generateReportBtn').addEventListener('click', ()=>{
+// ---- Report names: JOB#-OUT-01, JOB#-OUT-02, JOB#-IN-01 … ----
+// The job number leads, then the direction, then a running number counted per job
+// and direction, so every report for a job has its own name the team can refer to.
+// Reports saved before numbering (plain "JOB#-OUT") each count as one.
+async function nextReportName(jobNumRaw, dir){
+  const base = `${jobNumRaw.toUpperCase().replace(/\s+/g,'-')}-${dir}`;
+  try {
+    if(await ensureSession() !== 'ok') throw new Error('not signed in / offline');
+    const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${staffSession.access_token}` };
+    let used = 0;
+    let res = await fetch(`${SUPABASE_URL}/rest/v1/pick_history?select=report_name&report_name=like.${encodeURIComponent(base)}*&limit=1000`, { headers });
+    if(res.ok){
+      const esc_ = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const exact = new RegExp(`^${esc_}(?:-(\\d+))?$`);
+      let count = 0, maxSeq = 0;
+      (await res.json()).forEach(r=>{
+        const m = exact.exec(r.report_name || '');
+        if(!m) return;
+        count++;
+        if(m[1]) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+      });
+      used = Math.max(count, maxSeq);
+    } else {
+      // No report_name column to look at — count this job's reports instead.
+      res = await fetch(`${SUPABASE_URL}/rest/v1/pick_history?select=job_number&direction=eq.${dir}&job_number=ilike.${encodeURIComponent(jobNumRaw)}&limit=1000`, { headers });
+      if(!res.ok) throw new Error('lookup failed ' + res.status);
+      used = (await res.json()).length;
+    }
+    return `${base}-${String(used + 1).padStart(2,'0')}`;
+  } catch(e){
+    // Can't check what's already saved (offline) — use the date and time so the
+    // name is still unique.
+    const d = new Date(), p2 = n=> String(n).padStart(2,'0');
+    return `${base}-${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+  }
+}
+
+// Saves a freshly generated report and tells the shop person whether it actually
+// reached the history, with a retry if it didn't.
+let reportBeingSaved = null;
+async function saveReportWithStatus(rec){
+  const el = document.getElementById('reportSaveStatus');
+  reportBeingSaved = rec;
+  el.className = 'report-save-status pending';
+  el.textContent = 'Saving to history…';
+  const ok = await savePickHistory(rec);
+  if(reportBeingSaved !== rec) return;   // a different report is on screen now
+  if(ok){
+    el.className = 'report-save-status ok';
+    el.textContent = '✓ Saved to history';
+  } else {
+    el.className = 'report-save-status err';
+    el.innerHTML = 'NOT saved to history — check the internet connection and retry. If it keeps failing, tell Eliazar. <button type="button" id="retrySaveBtn">Retry save</button>';
+    document.getElementById('retrySaveBtn').addEventListener('click', ()=> saveReportWithStatus(rec));
+  }
+}
+
+const generateReportBtn = document.getElementById('generateReportBtn');
+generateReportBtn.addEventListener('click', async ()=>{
   if(cart.length === 0){ alert('Add at least one item before generating a report.'); return; }
   const jobNumRaw = document.getElementById('jobNumber').value.trim();
   if(!jobNumRaw){ alert('Enter the Job # before generating a report. It is used to name and look up the report.'); document.getElementById('jobNumber').focus(); return; }
+  // Everything is read off the screen before the name lookup, so nothing changes mid-way.
   const rec = {
-    report_name: `${jobNumRaw.toUpperCase().replace(/\s+/g,'-')}-${direction}`,
+    report_name: '',
     direction,
     job_name: document.getElementById('jobName').value || '—',
     job_number: jobNumRaw,
@@ -3241,8 +3432,16 @@ document.getElementById('generateReportBtn').addEventListener('click', ()=>{
     dop: dop || '—',
     items: cart.map(c=>({id:c.id, name:c.name, unit:c.unit, category:c.category, qty:c.qty, price:c.price}))
   };
-  rec.total = showReport(rec);
-  savePickHistory(rec);
+  generateReportBtn.disabled = true;
+  generateReportBtn.textContent = 'Generating…';
+  try {
+    rec.report_name = await nextReportName(jobNumRaw, rec.direction);
+    rec.total = showReport(rec);
+    saveReportWithStatus(rec);
+  } finally {
+    generateReportBtn.disabled = false;
+    generateReportBtn.textContent = 'Generate Report';
+  }
 });
 
 document.getElementById('backToCartBtn').addEventListener('click', ()=>{
@@ -3280,14 +3479,10 @@ document.getElementById('settingsRefreshBtn').addEventListener('click', async ()
   await refreshLivePrices();
 });
 
-// ---- History modal (staff login + pick history search) ----
+// ---- History modal (pick history search) ----
 const historyOverlay = document.getElementById('historyOverlay');
-const historyLoginView = document.getElementById('historyLoginView');
-const historyListView = document.getElementById('historyListView');
 
 function showHistoryList(){
-  historyLoginView.style.display = 'none';
-  historyListView.style.display = 'block';
   document.getElementById('historySearchInput').value = '';
   historyTerm = '';
   // Always open on the latest-first list; By Job is one tap away.
@@ -3297,44 +3492,12 @@ function showHistoryList(){
   loadHistory();
 }
 
-document.getElementById('historyBtn').addEventListener('click', async ()=>{
+document.getElementById('historyBtn').addEventListener('click', ()=>{
   historyOverlay.classList.add('open');
-  if(isLoggedIn()){
-    showHistoryList();
-  } else {
-    const refreshed = await staffRefreshSession();
-    if(refreshed){ showHistoryList(); }
-    else {
-      historyLoginView.style.display = 'block';
-      historyListView.style.display = 'none';
-      document.getElementById('historyLoginStatus').textContent = '';
-    }
-  }
-});
-document.getElementById('historyCancelBtn').addEventListener('click', ()=>{
-  historyOverlay.classList.remove('open');
+  showHistoryList();
 });
 document.getElementById('historyCloseBtn').addEventListener('click', ()=>{
   historyOverlay.classList.remove('open');
-});
-document.getElementById('historyLoginBtn').addEventListener('click', async ()=>{
-  const email = document.getElementById('historyEmail').value.trim();
-  const password = document.getElementById('historyPassword').value;
-  const statusEl = document.getElementById('historyLoginStatus');
-  statusEl.textContent = 'Logging in…'; statusEl.className = 'settings-status pending';
-  try {
-    await staffLogin(email, password);
-    document.getElementById('historyPassword').value = '';
-    showHistoryList();
-  } catch(e){
-    statusEl.textContent = 'Login failed — check email and password.'; statusEl.className = 'settings-status err';
-  }
-});
-document.getElementById('historyLogoutBtn').addEventListener('click', ()=>{
-  clearStaffSession();
-  historyListView.style.display = 'none';
-  historyLoginView.style.display = 'block';
-  document.getElementById('historyLoginStatus').textContent = '';
 });
 let historySearchDebounce;
 document.getElementById('historySearchInput').addEventListener('input', (e)=>{
@@ -3349,6 +3512,7 @@ document.getElementById('historySearchInput').addEventListener('input', (e)=>{
 // Load cached prices immediately (no flash of missing prices), then try a fresh pull.
 loadCachedPrices();
 loadStaffSession();
+initLoginGate();
 buildChips();
 renderItems();
 renderCartModal();
