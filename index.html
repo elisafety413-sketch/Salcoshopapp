@@ -265,6 +265,7 @@
   .history-row:hover{ background:var(--bg); }
   #historyResults > .history-row:first-child, .job-reports > .history-row:first-child{ border-top:none; }
   .hist-amt{ font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .hist-amt.none{ font-weight:400; font-size:13px; color:var(--text-2); }
   .hist-dir{ display:inline-block; min-width:46px; text-align:center; padding:4px 9px; border-radius:6px; color:#fff; font-size:12.5px; font-weight:700; flex-shrink:0; }
   .hist-dir.out{ background:var(--red); }
   .hist-dir.in{ background:var(--green); }
@@ -316,6 +317,7 @@
   table.report-table td.cat-td{ background:#EEE7D6; color:var(--label); font-weight:700; font-size:12.5px; }
   table.report-table td.total-label, table.report-table td.total-value{ font-weight:700; }
   .price-col, .total-col{ width:95px; }
+  .qty-col{ width:80px; } .unit-col{ width:110px; }
 
   .report-footer{ margin-top:24px; display:flex; justify-content:space-between; gap:30px; }
   .sig-line{ flex:1; border-top:1px solid var(--ink); padding-top:6px; font-size:12px; color:var(--text-2); }
@@ -3034,7 +3036,6 @@ let historyTerm = '';
 let historyLoadSeq = 0;
 let historyAllRows = null;    // full history for By Job, loaded once each time History is opened
 
-function fmtSignedMoney(n){ return (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2); }
 
 // Dollar value of one saved report: the total stored with it, or (older rows
 // saved without one) recalculated from its priced items.
@@ -3061,14 +3062,13 @@ function groupHistoryByJob(rows){
     const key = jobKeyOf(r);
     let g = groups.get(key);
     if(!g){
-      g = { key, name:'', reports:[], outTotal:0, inTotal:0, outCount:0, inCount:0, unpriced:0, lastAt:r.created_at };
+      g = { key, name:'', reports:[], outTotal:0, outCount:0, inCount:0, unpriced:0, lastAt:r.created_at };
       groups.set(key, g);
     }
     if(!g.name && r.job_name && r.job_name !== '—') g.name = r.job_name;
-    const t = reportTotal(r);
-    if(r.direction === 'IN'){ g.inTotal += t; g.inCount++; }
-    else { g.outTotal += t; g.outCount++; }
-    g.unpriced += reportUnpricedCount(r);
+    // IN reports record returned stock only, so they add nothing to the job cost.
+    if(r.direction === 'IN'){ g.inCount++; }
+    else { g.outTotal += reportTotal(r); g.outCount++; g.unpriced += reportUnpricedCount(r); }
     g.reports.push({ r, idx:i });
   });
   return Array.from(groups.values());
@@ -3084,7 +3084,7 @@ function historyRowHtml(r, idx, showJobName){
         ${showJobName ? `<div class="imeta">${esc(r.job_name || '—')}</div>` : ''}
         <div class="imeta">${d.toLocaleDateString()}, ${itemCount} item${itemCount===1?'':'s'}</div>
       </div>
-      <div class="hist-amt">${fmtMoney(reportTotal(r))}</div>
+      ${r.direction === 'IN' ? `<div class="hist-amt none">No cost</div>` : `<div class="hist-amt">${fmtMoney(reportTotal(r))}</div>`}
       <span class="hist-dir ${r.direction==='OUT' ? 'out' : 'in'}">${esc(r.direction)}</span>
     </div>`;
 }
@@ -3127,14 +3127,13 @@ function renderHistoryResults(rows){
   sumEl.textContent = `${groups.length} job${groups.length===1?'':'s'}, ${shownReports} report${shownReports===1?'':'s'}, most recently active first`
     + (historyTruncated ? `. Only the newest ${HISTORY_MAX_ROWS} reports are included.` : '');
   el.innerHTML = groups.map(g=>{
-    const net = g.outTotal - g.inTotal;
+    const net = g.outTotal;
     const n = g.reports.length;
     const counts = [g.outCount ? `${g.outCount} OUT` : '', g.inCount ? `${g.inCount} IN` : ''].filter(Boolean).join(', ');
     const breakdown = `
       <div class="job-breakdown">
-        <span>Out: <strong>${fmtMoney(g.outTotal)}</strong></span>
-        ${g.inCount ? `<span>Returned: <strong>-${fmtMoney(g.inTotal)}</strong></span>` : ''}
-        <span>Job cost: <strong>${fmtSignedMoney(net)}</strong></span>
+        <span>Job cost (${g.outCount} OUT report${g.outCount===1?'':'s'}): <strong>${fmtMoney(net)}</strong></span>
+        ${g.inCount ? `<span>${g.inCount} IN report${g.inCount===1?'':'s'}: returned stock, not priced</span>` : ''}
         ${g.unpriced ? `<span title="Lines saved with no price are not in the totals">${g.unpriced} unpriced line${g.unpriced===1?'':'s'} not included</span>` : ''}
       </div>`;
     return `
@@ -3147,7 +3146,7 @@ function renderHistoryResults(rows){
           </div>
           <div class="job-total">
             <div class="lbl">Job cost</div>
-            <div class="amt">${fmtSignedMoney(net)}</div>
+            <div class="amt">${fmtMoney(net)}</div>
           </div>
         </summary>
         <div class="job-reports">${g.reports.map(x=> historyRowHtml(x.r, x.idx, false)).join('')}</div>
@@ -3249,12 +3248,15 @@ function renderItems(){
       const { id, name, unit } = item;
       const inCart = findCartQty(id);
       const price = getPrice(id);
+      // IN sheets record returned stock only, so prices are hidden while IN is selected.
+      const priceLine = direction === 'IN' ? ''
+        : (price!==null ? `<div class="iprice">${fmtMoney(price)}</div>` : `<div class="iprice none">No price yet</div>`);
       html += `
         <div class="item-card${inCart ? ' in-cart' : ''}">
           <div class="iname">${esc(name)}</div>
           <div class="card-row">
             <div>
-              ${price!==null ? `<div class="iprice">${fmtMoney(price)}</div>` : `<div class="iprice none">No price yet</div>`}
+              ${priceLine}
               <div class="iunit">per ${esc(unit)}, item ${id}</div>
             </div>
             <div class="card-add">
@@ -3295,12 +3297,16 @@ document.getElementById('dirOut').addEventListener('click', ()=>{
   document.getElementById('dirIn').classList.remove('active');
   document.getElementById('pullLastOutBtn').style.display = 'none';
   document.getElementById('pullOutStatus').textContent = '';
+  renderItems();
+  renderCartModal();
 });
 document.getElementById('dirIn').addEventListener('click', ()=>{
   direction='IN';
   document.getElementById('dirIn').classList.add('active');
   document.getElementById('dirOut').classList.remove('active');
   document.getElementById('pullLastOutBtn').style.display = 'inline-flex';
+  renderItems();
+  renderCartModal();
 });
 
 document.getElementById('pullLastOutBtn').addEventListener('click', ()=>{
@@ -3327,8 +3333,9 @@ function renderCartModal(){
     if(totalEl) totalEl.remove();
     return;
   }
+  const isIn = direction === 'IN';
   list.innerHTML = cart.map((c,i)=>{
-    const priced = (c.price!==null && c.price!==undefined);
+    const priced = !isIn && (c.price!==null && c.price!==undefined);
     return `
     <li class="cart-row">
       <div class="info">
@@ -3340,7 +3347,7 @@ function renderCartModal(){
         <span>${c.qty}</span>
         <button type="button" data-act="inc" data-idx="${i}" aria-label="One more ${esc(c.name)}">${ICON.plus}</button>
       </div>
-      ${priced ? `<div class="line-total">${fmtMoney(c.price*c.qty)}</div>` : `<div class="line-total none">No price yet</div>`}
+      ${isIn ? '' : (priced ? `<div class="line-total">${fmtMoney(c.price*c.qty)}</div>` : `<div class="line-total none">No price yet</div>`)}
       <button type="button" class="remove-btn" data-act="rm" data-idx="${i}" aria-label="Remove ${esc(c.name)}">${ICON.x}</button>
     </li>
   `;}).join('');
@@ -3365,6 +3372,11 @@ function renderCartModal(){
     list.insertAdjacentElement('afterend', totalEl);
   }
   totalEl.className = 'cart-total';
+  if(isIn){
+    const qty = cart.reduce((s,c)=> s + c.qty, 0);
+    totalEl.innerHTML = `<span class="lbl">Total quantity returning</span><strong>${qty}</strong>`;
+    return;
+  }
   totalEl.innerHTML = `<span class="lbl">Estimated total</span><strong>${fmtMoney(runningTotal)}</strong>${unpriced ? `<span class="note">${unpriced} item${unpriced>1?'s':''} without a price not included</span>` : ''}`;
 }
 
@@ -3409,6 +3421,7 @@ function showReport(rec, opts){
     saveEl.textContent = ''; saveEl.className = 'report-save-status';
   }
   const savedNote = opts.saved ? `<div class="report-name" style="font-weight:400">Reopened from history, saved ${new Date(opts.saved).toLocaleString()}</div>` : '';
+  const isIn = rec.direction === 'IN';   // IN sheets record returned stock only: no prices
   let currentCat = '';
   let grandTotal = 0;
   let hasUnpriced = false;
@@ -3416,7 +3429,15 @@ function showReport(rec, opts){
     let catRow = '';
     if(c.category !== currentCat){
       currentCat = c.category;
-      catRow = `<tr><td colspan="5" class="cat-td">${esc(currentCat)}</td></tr>`;
+      catRow = `<tr><td colspan="${isIn ? 3 : 5}" class="cat-td">${esc(currentCat)}</td></tr>`;
+    }
+    if(isIn){
+      return catRow + `
+      <tr>
+        <td>${esc(c.name)}</td>
+        <td class="num">${c.qty}</td>
+        <td>${esc(c.unit)}</td>
+      </tr>`;
     }
     const priced = (c.price!==null && c.price!==undefined);
     if(priced){ grandTotal += c.price * c.qty; } else { hasUnpriced = true; }
@@ -3431,7 +3452,7 @@ function showReport(rec, opts){
         ${totalCell}
       </tr>`;
   }).join('');
-  const grandTotalRow = `
+  const grandTotalRow = isIn ? '' : `
     <tr>
       <td colspan="3"></td>
       <td class="num total-label">Total</td>
@@ -3459,11 +3480,13 @@ function showReport(rec, opts){
     </div>
     <table class="report-table">
       <thead>
-        <tr><th>Item</th><th class="num">Qty</th><th>Unit</th><th class="price-col num">Unit price</th><th class="total-col num">Total</th></tr>
+        ${isIn
+          ? `<tr><th>Item</th><th class="num qty-col">Qty</th><th class="unit-col">Unit</th></tr>`
+          : `<tr><th>Item</th><th class="num">Qty</th><th>Unit</th><th class="price-col num">Unit price</th><th class="total-col num">Total</th></tr>`}
       </thead>
       <tbody>${rows}${grandTotalRow}</tbody>
     </table>
-    <div class="report-note">${hasUnpriced ? 'Prices shown are from the Salco master price list where available; blank lines still need office pricing.' : 'Prices shown are from the Salco master price list.'}</div>
+    <div class="report-note">${isIn ? 'Returned stock. IN sheets are not priced.' : hasUnpriced ? 'Prices shown are from the Salco master price list where available; blank lines still need office pricing.' : 'Prices shown are from the Salco master price list.'}</div>
     <div class="report-footer">
       <div class="sig-line">Project Manager/Supervisor's Name</div>
       <div class="sig-line">Shop Signature</div>
@@ -3474,7 +3497,7 @@ function showReport(rec, opts){
   document.querySelector('.workspace').style.display = 'none';
   document.getElementById('reportView').classList.add('open');
   window.scrollTo(0,0);
-  return grandTotal;
+  return isIn ? 0 : grandTotal;
 }
 
 // ---- Report names: JOB#-OUT-01, JOB#-OUT-02, JOB#-IN-01 … ----
@@ -3552,7 +3575,7 @@ generateReportBtn.addEventListener('click', async ()=>{
     scope: Array.from(document.querySelectorAll('#scopeGroup .toggle-opt.selected')).map(b=>b.dataset.scope).join(', ') || '—',
     risk: risk || '—',
     dop: dop || '—',
-    items: cart.map(c=>({id:c.id, name:c.name, unit:c.unit, category:c.category, qty:c.qty, price:c.price}))
+    items: cart.map(c=>({id:c.id, name:c.name, unit:c.unit, category:c.category, qty:c.qty, price: direction === 'IN' ? null : c.price}))
   };
   generateReportBtn.disabled = true;
   generateReportBtn.textContent = 'Generating…';
