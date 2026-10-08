@@ -327,6 +327,11 @@
   .report-save-status.err{ color:var(--red-dark); }
   .report-save-status.pending{ color:var(--text-2); }
   .report-actions{ display:flex; gap:10px; max-width:900px; margin:14px auto 0; }
+  .po-add{ display:none; max-width:900px; margin:16px auto 0; padding:14px 16px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+  .po-add.open{ display:block; }
+  .po-add-row{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; }
+  .po-add-row .field{ flex:1; min-width:200px; }
+  .po-add p{ margin:8px 0 0; font-size:13px; color:var(--text-2); }
   .report-actions > button{ flex:1; min-height:50px; }
 
   /* ---- Login screen: covers the whole app until someone signs in ---- */
@@ -347,7 +352,7 @@
 
   @media print{
     body, .app{ background:#fff; }
-    .topbar, .search-bar, .workspace, .report-actions, .report-save-status, .login-gate, .modal-overlay{ display:none !important; }
+    .topbar, .search-bar, .workspace, .report-actions, .report-save-status, .po-add, .login-gate, .modal-overlay{ display:none !important; }
     #reportView{ display:block !important; padding:0; }
     .report-sheet{ border:none; border-radius:0; padding:0; max-width:none; }
     .app{ max-width:none; }
@@ -480,6 +485,16 @@
 
   <div id="reportView">
     <div class="report-sheet" id="reportSheet"></div>
+    <div class="po-add" id="poAddPanel">
+      <div class="po-add-row">
+        <div class="field">
+          <label for="poAddInput">This report has no PO #. Add one:</label>
+          <input type="text" id="poAddInput" placeholder="PO #">
+        </div>
+        <button type="button" class="btn-primary" id="poAddBtn">Add PO #</button>
+      </div>
+      <p id="poAddStatus">A PO # can only be added once. After that it can't be changed.</p>
+    </div>
     <div class="report-save-status" id="reportSaveStatus"></div>
     <div class="report-actions">
       <button type="button" class="btn-secondary" id="backToCartBtn">
@@ -3187,7 +3202,7 @@ document.getElementById('historyResults').addEventListener('click', (e)=>{
   if(!r) return;
   try {
     document.getElementById('historyOverlay').classList.remove('open');
-    showReport({...r, report_name: historyReportName(r)}, {saved: r.created_at});
+    showReport({...r, report_name: historyReportName(r)}, {saved: r.created_at, row: r});
   } catch(err){
     console.error('Could not open saved report', err, r);
     alert('Could not open this report.\n\nPlease send this to Eliazar:\n' + (err && err.message ? err.message : err));
@@ -3415,6 +3430,7 @@ function showReport(rec, opts){
   opts = opts || {};
   rec = {...rec, items: normalizeItems(rec.items)};
   currentReportName = rec.report_name || '';
+  setupPoAdd(opts.saved && opts.row && poIsBlank(rec.po_number) ? opts.row : null);
   if(opts.saved){
     reportBeingSaved = null;
     const saveEl = document.getElementById('reportSaveStatus');
@@ -3470,7 +3486,7 @@ function showReport(rec, opts){
     <div class="meta-fields">
       <div class="meta-field"><label>Job Name</label><div class="val">${esc(rec.job_name)}</div></div>
       <div class="meta-field"><label>Job #</label><div class="val">${esc(rec.job_number)}</div></div>
-      <div class="meta-field"><label>PO #</label><div class="val">${esc(rec.po_number)}</div></div>
+      <div class="meta-field"><label>PO #</label><div class="val" id="reportPoVal">${esc(rec.po_number)}</div></div>
       <div class="meta-field"><label>Date</label><div class="val">${esc(rec.report_date)}</div></div>
       <div class="meta-field"><label>Person Taking/Returning Materials</label><div class="val">${esc(rec.person_name)}</div></div>
       <div class="meta-field"><label>Crew Size</label><div class="val">${esc(rec.crew_size)}</div></div>
@@ -3499,6 +3515,69 @@ function showReport(rec, opts){
   window.scrollTo(0,0);
   return isIn ? 0 : grandTotal;
 }
+
+// ---- Adding a PO # to a saved report (add only, never change) ----
+// Reports stay locked. The one exception: a report saved without a PO # can have one
+// added later, once. The database enforces the same rule (only the PO # column can be
+// updated, and only while it is still blank), so the app can't be used to change anything else.
+function poIsBlank(v){ return v == null || String(v).trim() === '' || String(v).trim() === '—'; }
+let poAddRow = null;
+function setupPoAdd(row){
+  poAddRow = row;
+  const panel = document.getElementById('poAddPanel');
+  panel.classList.toggle('open', !!row);
+  document.getElementById('poAddInput').value = '';
+  document.getElementById('poAddInput').disabled = false;
+  document.getElementById('poAddBtn').disabled = false;
+  const st = document.getElementById('poAddStatus');
+  st.className = ''; st.textContent = "A PO # can only be added once. After that it can't be changed.";
+}
+async function addPoToReport(){
+  const row = poAddRow; if(!row) return;
+  const input = document.getElementById('poAddInput'), btn = document.getElementById('poAddBtn'), st = document.getElementById('poAddStatus');
+  const po = input.value.trim();
+  if(poIsBlank(po)){ st.className = 'settings-status err'; st.textContent = 'Type the PO # first.'; input.focus(); return; }
+  if(!confirm(`Add PO # "${po}" to ${historyReportName(row)}?\n\nIt can't be changed after this.`)) return;
+  btn.disabled = true; st.className = 'settings-status pending'; st.textContent = 'Adding PO #…';
+  try {
+    const state = await ensureSession();
+    if(state !== 'ok'){ if(state === 'denied'){ sessionExpired(); } throw new Error('offline'); }
+    // Find the report by its id; very old rows without one are matched on when they were saved.
+    const match = (row.id !== undefined && row.id !== null)
+      ? `id=eq.${encodeURIComponent(row.id)}`
+      : `created_at=eq.${encodeURIComponent(row.created_at)}&job_number=eq.${encodeURIComponent(row.job_number || '')}`;
+    // Only touches the row while its PO # is still blank.
+    const blank = `or=(po_number.is.null,po_number.eq.,po_number.eq.${encodeURIComponent('—')})`;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/pick_history?${match}&${blank}`, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${staffSession.access_token}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify({ po_number: po })
+    });
+    if(res.status === 401){ sessionExpired(); throw new Error('signed out'); }
+    const rows = res.ok ? await res.json() : [];
+    if(!res.ok || !Array.isArray(rows) || rows.length !== 1){
+      console.error('PO add failed', res.status, rows);
+      btn.disabled = false;
+      st.className = 'settings-status err';
+      st.textContent = 'PO # was not added. The report may already have one, or adding PO numbers is not switched on yet. Tell Eliazar.';
+      return;
+    }
+    // Show it on the report and in the History lists without reloading.
+    row.po_number = po;
+    document.getElementById('reportPoVal').textContent = po;
+    input.disabled = true;
+    st.className = 'settings-status ok';
+    st.textContent = `PO # ${po} added. Print the report again if you need a copy with it.`;
+    poAddRow = null;
+  } catch(e){
+    btn.disabled = false;
+    if(document.body.classList.contains('locked')) return;
+    st.className = 'settings-status err';
+    st.textContent = 'PO # was not added. Check the internet connection and try again.';
+  }
+}
+document.getElementById('poAddBtn').addEventListener('click', addPoToReport);
+document.getElementById('poAddInput').addEventListener('keydown', e=>{ if(e.key === 'Enter') addPoToReport(); });
 
 // ---- Report names: JOB#-OUT-01, JOB#-OUT-02, JOB#-IN-01 … ----
 // The job number leads, then the direction, then a running number counted per job
